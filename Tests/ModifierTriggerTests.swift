@@ -38,6 +38,22 @@ struct ModifierTriggerTests {
     @Test func fnCountsAsAnotherModifierForTheRest() {
         #expect(ModifierTrigger.rightOption.othersHeld(in: flags([.option, .function], device: 0x0000_0040)))
     }
+
+    @Test func eachTriggerFallsBackToItsOwnSharedFlag() {
+        let sharedFlags: [ModifierTrigger: NSEvent.ModifierFlags] = [
+            .leftControl: .control, .rightControl: .control,
+            .leftShift: .shift, .rightShift: .shift,
+            .leftCommand: .command, .rightCommand: .command,
+            .leftOption: .option, .rightOption: .option,
+            .function: .function,
+        ]
+        for (trigger, flag) in sharedFlags {
+            #expect(trigger.isDown(in: flag), "\(trigger)")
+            for (other, otherFlag) in sharedFlags where otherFlag != flag {
+                #expect(!other.isDown(in: flag), "\(other) with \(trigger)")
+            }
+        }
+    }
 }
 
 struct CombinationScrollTests {
@@ -51,6 +67,16 @@ struct CombinationScrollTests {
         #expect(!ModifierHotkeyMonitor.isDeliberateScroll(phase: [], momentumPhase: .changed))
         #expect(!ModifierHotkeyMonitor.isDeliberateScroll(phase: .mayBegin, momentumPhase: []))
         #expect(!ModifierHotkeyMonitor.isDeliberateScroll(phase: .cancelled, momentumPhase: []))
+    }
+
+    @Test func scrollsThatBeginOrEndCount() {
+        #expect(ModifierHotkeyMonitor.isDeliberateScroll(phase: .began, momentumPhase: []))
+        #expect(ModifierHotkeyMonitor.isDeliberateScroll(phase: .ended, momentumPhase: []))
+    }
+
+    @Test func noPartOfAFlingCounts() {
+        #expect(!ModifierHotkeyMonitor.isDeliberateScroll(phase: [], momentumPhase: .began))
+        #expect(!ModifierHotkeyMonitor.isDeliberateScroll(phase: [], momentumPhase: .ended))
     }
 
     @Test func eachSideReadsItsOwnDeviceBit() {

@@ -540,6 +540,24 @@ struct RecordingCoordinatorTests {
         #expect(coordinator.state == .recording)
     }
 
+    @Test func onlyTheTriggerThatStartedAHoldFinishesIt() async {
+        let triggers: [RecordingCoordinator.Trigger] = [.shortcut, .functionKey, .modifier]
+        for held in triggers {
+            for other in triggers where other != held {
+                let session = FakeSession()
+                let coordinator = makeCoordinator(session: session)
+
+                await coordinator.triggerPressed(held, at: epoch)
+                await coordinator.triggerReleased(other, at: epoch.addingTimeInterval(2))
+                #expect(coordinator.state == .recording, "\(held) released by \(other)")
+
+                await coordinator.triggerReleased(held, at: epoch.addingTimeInterval(3))
+                #expect(coordinator.state == .idle, "\(held)")
+                #expect(session.stopCalled == 1, "\(held)")
+            }
+        }
+    }
+
     @Test func emptyTranscriptIsNotSavedOrInserted() async {
         let session = FakeSession()
         session.textToReturn = "   \n  "
