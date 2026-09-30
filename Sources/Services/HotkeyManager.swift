@@ -6,12 +6,17 @@ extension KeyboardShortcuts.Name {
 
 @MainActor
 final class HotkeyManager {
-    private var handler: (() -> Void)?
+    private var pressHandler: (() -> Void)?
+    private var releaseHandler: (() -> Void)?
 
-    func onToggle(_ action: @escaping () -> Void) {
-        handler = action
+    func onTrigger(pressed: @escaping () -> Void, released: @escaping () -> Void) {
+        pressHandler = pressed
+        releaseHandler = released
         KeyboardShortcuts.onKeyDown(for: .toggleRecording) { [weak self] in
-            self?.handler?()
+            self?.pressHandler?()
+        }
+        KeyboardShortcuts.onKeyUp(for: .toggleRecording) { [weak self] in
+            self?.releaseHandler?()
         }
     }
 }

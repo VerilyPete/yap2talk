@@ -142,6 +142,14 @@ struct SettingsView: View {
                     }
                     .padding(.horizontal, Theme.s3)
                     .padding(.vertical, Theme.s2 + 2)
+
+                    Divider().overlay(Theme.hairline).padding(.horizontal, Theme.s3)
+
+                    SettingsToggleRow(
+                        title: "Hold to talk",
+                        subtitle: "Hold the shortcut while you speak, and let go to finish.",
+                        isOn: $app.holdToTalkEnabled
+                    )
                 }
             }
         }

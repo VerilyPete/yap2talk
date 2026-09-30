@@ -25,6 +25,10 @@ final class AppState {
         }
     }
 
+    var holdToTalkEnabled: Bool {
+        didSet { UserDefaults.standard.set(holdToTalkEnabled, forKey: "holdToTalkEnabled") }
+    }
+
     var mainPage: MainPage = .settings
 
     var modifierTrigger: ModifierTrigger {
@@ -97,6 +101,7 @@ final class AppState {
         showInDock = (UserDefaults.standard.object(forKey: "showInDock") as? Bool) ?? true
         showInMenuBar = (UserDefaults.standard.object(forKey: "showInMenuBar") as? Bool) ?? true
         cleanupEnabled = (UserDefaults.standard.object(forKey: "cleanupEnabled") as? Bool) ?? false
+        holdToTalkEnabled = (UserDefaults.standard.object(forKey: "holdToTalkEnabled") as? Bool) ?? true
         modifierTrigger = ModifierTrigger(
             rawValue: UserDefaults.standard.string(forKey: "modifierTrigger") ?? ""
         ) ?? .none
@@ -125,6 +130,7 @@ final class AppState {
             sounds: sounds,
             cleaner: cleanup,
             cleanupEnabled: { [weak self] in self?.cleanupEnabled ?? false },
+            holdToTalkEnabled: { [weak self] in self?.holdToTalkEnabled ?? true },
             vocabulary: { [weak self] in self?.vocabulary.terms ?? [] },
             deviceName: { [weak self] in self?.currentInputName }
         )
@@ -142,10 +148,16 @@ final class AppState {
         // keeps the UI honest the moment the user grants it.
         permissions.startObserving()
 
-        hotkeys.onToggle { [weak self] in
-            guard let self else { return }
-            Task { await self.coordinator.toggle() }
-        }
+        hotkeys.onTrigger(
+            pressed: { [weak self] in
+                guard let self else { return }
+                Task { await self.coordinator.triggerPressed() }
+            },
+            released: { [weak self] in
+                guard let self else { return }
+                Task { await self.coordinator.triggerReleased() }
+            }
+        )
 
         modifierHotkeys.onTap = { [weak self] in
             guard let self else { return }

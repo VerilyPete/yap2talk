@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import Yap
 
@@ -80,6 +81,7 @@ private func makeCoordinator(
     hud: FakeHUD? = nil,
     cleaner: FakeCleaner? = nil,
     cleanupEnabled: Bool = false,
+    holdToTalkEnabled: Bool = true,
     vocabulary: [String] = []
 ) -> RecordingCoordinator {
     RecordingCoordinator(
@@ -90,6 +92,7 @@ private func makeCoordinator(
         sounds: FakeSounds(),
         cleaner: cleaner ?? FakeCleaner(),
         cleanupEnabled: { cleanupEnabled },
+        holdToTalkEnabled: { holdToTalkEnabled },
         vocabulary: { vocabulary },
         deviceName: { "Test Mic" }
     )
@@ -159,6 +162,67 @@ struct RecordingCoordinatorTests {
         #expect(session.stopCalled == 1)
         #expect(injector.delivered == ["hello world"])
         #expect(coordinator.state == .idle)
+    }
+
+    @Test func releasingAHeldTriggerFinishesTheDictation() async {
+        let session = FakeSession()
+        let injector = FakeInjector()
+        let coordinator = makeCoordinator(session: session, injector: injector)
+        let pressedAt = Date()
+
+        await coordinator.triggerPressed(at: pressedAt)
+        #expect(coordinator.state == .recording)
+        await coordinator.triggerReleased(at: pressedAt.addingTimeInterval(2))
+
+        #expect(session.stopCalled == 1)
+        #expect(injector.delivered == ["hello world"])
+        #expect(coordinator.state == .idle)
+    }
+
+    @Test func aQuickTapKeepsRecordingUntilTheNextPress() async {
+        let session = FakeSession()
+        let injector = FakeInjector()
+        let coordinator = makeCoordinator(session: session, injector: injector)
+        let pressedAt = Date()
+
+        await coordinator.triggerPressed(at: pressedAt)
+        await coordinator.triggerReleased(at: pressedAt.addingTimeInterval(0.1))
+        #expect(coordinator.state == .recording)
+
+        await coordinator.triggerPressed(at: pressedAt.addingTimeInterval(3))
+        #expect(injector.delivered == ["hello world"])
+
+        // The press already finished it; its release has nothing left to do.
+        await coordinator.triggerReleased(at: pressedAt.addingTimeInterval(6))
+        #expect(session.startCalled == 1)
+        #expect(session.stopCalled == 1)
+    }
+
+    @Test func releaseAfterACancelledHoldDoesNothing() async {
+        let session = FakeSession()
+        let injector = FakeInjector()
+        let coordinator = makeCoordinator(session: session, injector: injector)
+        let pressedAt = Date()
+
+        await coordinator.triggerPressed(at: pressedAt)
+        await coordinator.cancel()
+        await coordinator.triggerReleased(at: pressedAt.addingTimeInterval(2))
+
+        #expect(session.stopCalled == 1)
+        #expect(injector.delivered.isEmpty)
+        #expect(coordinator.state == .idle)
+    }
+
+    @Test func releaseIsIgnoredWhenHoldToTalkIsOff() async {
+        let session = FakeSession()
+        let coordinator = makeCoordinator(session: session, holdToTalkEnabled: false)
+        let pressedAt = Date()
+
+        await coordinator.triggerPressed(at: pressedAt)
+        await coordinator.triggerReleased(at: pressedAt.addingTimeInterval(2))
+
+        #expect(coordinator.state == .recording)
+        #expect(session.stopCalled == 0)
     }
 
     @Test func emptyTranscriptIsNotSavedOrInserted() async {

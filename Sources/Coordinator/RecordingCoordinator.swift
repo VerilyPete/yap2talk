@@ -19,6 +19,7 @@ final class RecordingCoordinator {
     private let sounds: SoundPlaying
     private let cleaner: TranscriptCleaning
     private let cleanupEnabled: () -> Bool
+    private let holdToTalkEnabled: () -> Bool
     private let vocabulary: () -> [String]
     private let deviceName: () -> String?
 
@@ -27,6 +28,10 @@ final class RecordingCoordinator {
     // A stop that arrives while the session is still starting waits for it; tearing down a half-built session would leave the microphone running unseen.
     private var isStarting = false
     private var stopWhenStarted = false
+
+    // Hold to talk: a press that starts a dictation and is held past this finishes it on release. A quicker tap leaves it recording until the next press, as before.
+    private var heldSince: Date?
+    private let minimumHoldDuration: TimeInterval = 0.3
 
     private var cancelArmed = false
     private var cancelArmTask: Task<Void, Never>?
@@ -40,6 +45,7 @@ final class RecordingCoordinator {
         sounds: SoundPlaying,
         cleaner: TranscriptCleaning,
         cleanupEnabled: @escaping () -> Bool,
+        holdToTalkEnabled: @escaping () -> Bool,
         vocabulary: @escaping () -> [String],
         deviceName: @escaping () -> String?
     ) {
@@ -50,6 +56,7 @@ final class RecordingCoordinator {
         self.sounds = sounds
         self.cleaner = cleaner
         self.cleanupEnabled = cleanupEnabled
+        self.holdToTalkEnabled = holdToTalkEnabled
         self.vocabulary = vocabulary
         self.deviceName = deviceName
 
@@ -107,6 +114,21 @@ final class RecordingCoordinator {
         case .transcribing, .inserting:
             break
         }
+    }
+
+    func triggerPressed(at time: Date = Date()) async {
+        heldSince = time
+        await toggle()
+    }
+
+    func triggerReleased(at time: Date = Date()) async {
+        guard let heldSince else { return }
+        self.heldSince = nil
+        guard holdToTalkEnabled(),
+              state == .recording,
+              time.timeIntervalSince(heldSince) >= minimumHoldDuration
+        else { return }
+        await stopRecording()
     }
 
     private func startRecording() async {
