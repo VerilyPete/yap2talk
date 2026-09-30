@@ -25,6 +25,20 @@ final class AppState {
         }
     }
 
+    var holdToTalkEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(holdToTalkEnabled, forKey: "holdToTalkEnabled")
+            modifierHotkeys.holdsEnabled = holdToTalkEnabled
+        }
+    }
+
+    var holdInterruption: HoldInterruption {
+        didSet {
+            UserDefaults.standard.set(holdInterruption.rawValue, forKey: "holdInterruption")
+            modifierHotkeys.holdInterruption = holdInterruption
+        }
+    }
+
     var mainPage: MainPage = .settings
 
     var modifierTrigger: ModifierTrigger {
@@ -88,7 +102,14 @@ final class AppState {
 
     private init() {
         do {
-            modelContainer = try ModelContainer(for: Transcript.self)
+            // Not SwiftData's default store, which Yap itself also opens: the two
+            // apps would otherwise share, and migrate, one history.
+            let folder = URL.applicationSupportDirectory.appending(path: "Yap2Talk", directoryHint: .isDirectory)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            modelContainer = try ModelContainer(
+                for: Transcript.self,
+                configurations: ModelConfiguration(url: folder.appending(path: "History.store"))
+            )
         } catch {
             fatalError("Yap: failed to create model container: \(error)")
         }
@@ -97,6 +118,10 @@ final class AppState {
         showInDock = (UserDefaults.standard.object(forKey: "showInDock") as? Bool) ?? true
         showInMenuBar = (UserDefaults.standard.object(forKey: "showInMenuBar") as? Bool) ?? true
         cleanupEnabled = (UserDefaults.standard.object(forKey: "cleanupEnabled") as? Bool) ?? false
+        holdToTalkEnabled = (UserDefaults.standard.object(forKey: "holdToTalkEnabled") as? Bool) ?? true
+        holdInterruption = HoldInterruption(
+            rawValue: UserDefaults.standard.string(forKey: "holdInterruption") ?? ""
+        ) ?? .earlyOnly
         modifierTrigger = ModifierTrigger(
             rawValue: UserDefaults.standard.string(forKey: "modifierTrigger") ?? ""
         ) ?? .none
@@ -125,6 +150,7 @@ final class AppState {
             sounds: sounds,
             cleaner: cleanup,
             cleanupEnabled: { [weak self] in self?.cleanupEnabled ?? false },
+            holdToTalkEnabled: { [weak self] in self?.holdToTalkEnabled ?? true },
             vocabulary: { [weak self] in self?.vocabulary.terms ?? [] },
             deviceName: { [weak self] in self?.currentInputName }
         )
@@ -142,21 +168,40 @@ final class AppState {
         // keeps the UI honest the moment the user grants it.
         permissions.startObserving()
 
-        hotkeys.onToggle { [weak self] in
-            guard let self else { return }
-            Task { await self.coordinator.toggle() }
-        }
+        hotkeys.onTrigger(
+            pressed: { [weak self] time in
+                guard let self else { return }
+                Task { await self.coordinator.triggerPressed(.shortcut, at: time) }
+            },
+            released: { [weak self] time in
+                guard let self else { return }
+                Task { await self.coordinator.triggerReleased(.shortcut, at: time) }
+            }
+        )
 
-        modifierHotkeys.onTap = { [weak self] in
+        modifierHotkeys.onGesture = { [weak self] gesture in
             guard let self else { return }
-            Task { await self.coordinator.toggle() }
+            Task {
+                switch gesture {
+                case .tap: await self.coordinator.toggle()
+                case .holdStarted(let pressedAt): await self.coordinator.triggerPressed(.modifier, at: pressedAt)
+                case .holdEnded(let releasedAt): await self.coordinator.triggerReleased(.modifier, at: releasedAt)
+                case .holdAbandoned: await self.coordinator.cancel()
+                }
+            }
         }
         modifierHotkeys.trigger = modifierTrigger
+        modifierHotkeys.holdsEnabled = holdToTalkEnabled
+        modifierHotkeys.holdInterruption = holdInterruption
         modifierHotkeys.start()
 
-        functionKeys.onTap = { [weak self] in
+        functionKeys.onPress = { [weak self] time in
             guard let self else { return }
-            Task { await self.coordinator.toggle() }
+            Task { await self.coordinator.triggerPressed(.functionKey, at: time) }
+        }
+        functionKeys.onRelease = { [weak self] time in
+            guard let self else { return }
+            Task { await self.coordinator.triggerReleased(.functionKey, at: time) }
         }
         functionKeys.trigger = functionKeyTrigger
         functionKeys.start()

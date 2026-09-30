@@ -8,6 +8,8 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-black.svg)](LICENSE) [![macOS 26+](https://img.shields.io/badge/macOS-26%2B-black.svg)](https://www.apple.com/macos/) [![Swift 6](https://img.shields.io/badge/Swift-6-black.svg)](https://swift.org)
 
+> **Yap2Talk** is a fork of [Yap](https://github.com/FrigadeHQ/yap) that adds hold to talk. It installs alongside Yap as its own app (`org.verily.Yap2Talk`) with its own settings, dictionary and history, so it starts fresh; build it with `./install.sh`. Quit Yap while you use it, or give the two different triggers: both answer the default `⌘⇧D`. The hold-to-talk changes live on the `hold-to-talk` branch, kept upstreamable.
+
 Press a shortcut, talk, press it again. Your words land in whatever text field you were using. No account, no API key, no audio leaving your machine.
 
 Built by [Frigade](https://frigade.com/?utm_source=yap&utm_medium=readme).
@@ -22,7 +24,7 @@ https://github.com/user-attachments/assets/9bd8dae6-49d6-4c06-98b9-878e24dd401f
 
 Yap lives in your menu bar and waits for a shortcut. Trigger it and a small window appears near the bottom of the screen with a live waveform and a running preview of what you have said so far. Press the shortcut again and the text gets pasted into the app you were already working in. Every transcript is saved locally, so you can go back and copy something again later.
 
-The default shortcut is `⌘⇧D`. You can rebind it, or set a single modifier key instead. Tapping right shift on its own works nicely if you have a spare thumb.
+The default shortcut is `⌘⇧D`. You can rebind it, or set a single modifier key instead. Tapping right shift on its own works nicely if you have a spare thumb. Whichever trigger you use, tap it to start and again to stop, or hold it while you talk and let go to finish.
 
 ## Install
 
@@ -66,6 +68,7 @@ So Yap ships no model at all. It's roughly three thousand lines of native Swift 
 
 - On-device transcription through Apple's Speech framework
 - Global shortcut, fully rebindable, with optional single-modifier triggers like right shift
+- Hold any trigger while you talk and let go to paste, or tap to start and stop
 - Pastes straight into the focused field of whatever app you were in
 - Local transcript history with search, copy, and delete
 - Live waveform and partial transcript while you speak

@@ -142,9 +142,44 @@ struct SettingsView: View {
                     }
                     .padding(.horizontal, Theme.s3)
                     .padding(.vertical, Theme.s2 + 2)
+
+                    Divider().overlay(Theme.hairline).padding(.horizontal, Theme.s3)
+
+                    SettingsToggleRow(
+                        title: "Hold to talk",
+                        subtitle: "Hold a trigger while you speak and let go to finish. A quick tap still starts and stops.",
+                        isOn: $app.holdToTalkEnabled
+                    )
+
+                    Divider().overlay(Theme.hairline).padding(.horizontal, Theme.s3)
+
+                    HStack(spacing: Theme.s3) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Discard a hold if another key is pressed").font(.system(size: 13, weight: .medium))
+                            Text(holdInterruptionSubtitle)
+                                .font(.system(size: 12)).foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: Theme.s3)
+                        Picker("", selection: $app.holdInterruption) {
+                            ForEach(HoldInterruption.allCases) { interruption in
+                                Text(interruption.title).tag(interruption)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(width: 168)
+                    }
+                    .padding(.horizontal, Theme.s3)
+                    .padding(.vertical, Theme.s2 + 2)
+                    .disabled(!app.holdToTalkEnabled || app.modifierTrigger == .none)
                 }
             }
         }
+    }
+
+    private var holdInterruptionSubtitle: String {
+        if app.modifierTrigger == .none { return "Set a single modifier key above to use this." }
+        if !app.holdToTalkEnabled { return "Turn on Hold to talk to use this." }
+        return "For the single modifier key. Clicks and scrolls count too, since they usually mean a shortcut."
     }
 
     private var languageSection: some View {

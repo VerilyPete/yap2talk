@@ -28,7 +28,7 @@ enum ModifierTrigger: String, CaseIterable, Identifiable {
         }
     }
 
-    /// `flagsChanged` reports which key changed — the only way to tell left from right.
+    /// `flagsChanged` reports which key changed.
     var keyCode: UInt16? {
         switch self {
         case .none: return nil
@@ -44,9 +44,29 @@ enum ModifierTrigger: String, CaseIterable, Identifiable {
         }
     }
 
-    var flag: NSEvent.ModifierFlags? {
+    /// `NX_DEVICE…KEYMASK` bits. The shared `.shift`-style flag can't tell the
+    /// two sides apart: with both Shifts down, letting go of one still reports
+    /// `.shift`. fn has only the one key, so its own flag serves.
+    var deviceMask: UInt {
         switch self {
-        case .none: return nil
+        case .none: return 0
+        case .leftControl: return 0x0000_0001
+        case .leftShift: return 0x0000_0002
+        case .rightShift: return 0x0000_0004
+        case .leftCommand: return 0x0000_0008
+        case .rightCommand: return 0x0000_0010
+        case .leftOption: return 0x0000_0020
+        case .rightOption: return 0x0000_0040
+        case .rightControl: return 0x0000_2000
+        case .function: return NSEvent.ModifierFlags.function.rawValue
+        }
+    }
+
+    /// Some software KVMs post modifier changes without any device bits; for
+    /// those, the shared flag is all there is to go on.
+    private var flag: NSEvent.ModifierFlags {
+        switch self {
+        case .none: return []
         case .leftShift, .rightShift: return .shift
         case .leftCommand, .rightCommand: return .command
         case .leftOption, .rightOption: return .option
@@ -54,36 +74,155 @@ enum ModifierTrigger: String, CaseIterable, Identifiable {
         case .function: return .function
         }
     }
+
+    private static let allDeviceMasks = allCases.reduce(0) { $0 | $1.deviceMask }
+    /// fn's mask is its shared flag, so it says nothing about whether the
+    /// event reports sides.
+    private static let sideMasks = allDeviceMasks & ~ModifierTrigger.function.deviceMask
+
+    func isDown(in flags: NSEvent.ModifierFlags) -> Bool {
+        guard flags.rawValue & Self.sideMasks != 0 else {
+            return self != .none && flags.contains(flag)
+        }
+        return flags.rawValue & deviceMask != 0
+    }
+
+    func othersHeld(in flags: NSEvent.ModifierFlags) -> Bool {
+        guard flags.rawValue & Self.sideMasks != 0 else {
+            return !flags.intersection([.shift, .control, .option, .command, .function]).subtracting(flag).isEmpty
+        }
+        return flags.rawValue & (Self.allDeviceMasks & ~deviceMask) != 0
+    }
 }
 
-/// "Clean tap" means pressed and released quickly on its own — so holding
-/// Right Shift to type a capital letter never fires the trigger.
+/// What another key, click or scroll does to a modifier hold that has already
+/// started recording: it may mean the hold was a shortcut after all, or just a
+/// click into the field being dictated into.
+enum HoldInterruption: String, CaseIterable, Identifiable {
+    case earlyOnly, anyTime, never
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .earlyOnly: return "In the first second"
+        case .anyTime: return "Any time"
+        case .never: return "Never"
+        }
+    }
+}
+
+/// "Clean" means pressed and released on its own — so holding Right Shift to
+/// type a capital letter never fires the trigger. A clean press released quickly
+/// is a tap; one held past `maximumTapDuration` becomes a hold until release.
+/// `interruption` decides whether a combo that follows abandons the hold.
+struct ModifierGesture {
+    enum Outcome: Equatable {
+        case tap
+        case holdStarted(at: Date)
+        case holdEnded(at: Date)
+        case holdAbandoned
+    }
+
+    /// Longer than this and it was a hold, not a tap.
+    static let maximumTapDuration: TimeInterval = 0.6
+
+    /// How long after recording starts `.earlyOnly` still treats another key
+    /// as a sign the hold was a shortcut.
+    static let interruptionWindow: TimeInterval = 1
+
+    let holdsEnabled: Bool
+    var interruption: HoldInterruption
+
+    private var pressedAt: Date?
+    private var usedInCombination = false
+    private var isHoldingToTalk = false
+
+    init(holdsEnabled: Bool = false, interruption: HoldInterruption = .earlyOnly) {
+        self.holdsEnabled = holdsEnabled
+        self.interruption = interruption
+    }
+
+    /// A press made while another modifier or a mouse button is already down
+    /// is part of that combo from the start.
+    mutating func pressed(at time: Date, otherInputHeld: Bool = false) {
+        pressedAt = time
+        usedInCombination = otherInputHeld
+        isHoldingToTalk = false
+    }
+
+    /// Another key, modifier, click, drag, scroll or gesture while ours is
+    /// down — that's a combo.
+    mutating func combined(at time: Date) -> Outcome? {
+        usedInCombination = true
+        guard isHoldingToTalk, let pressedAt else { return nil }
+        let recordingFor = time.timeIntervalSince(pressedAt) - Self.maximumTapDuration
+        // Input from before recording began was a shortcut, whatever the setting.
+        switch interruption {
+        case .never where recordingFor >= 0: return nil
+        case .earlyOnly where recordingFor >= Self.interruptionWindow: return nil
+        case .never, .earlyOnly, .anyTime: break
+        }
+        isHoldingToTalk = false
+        return .holdAbandoned
+    }
+
+    /// Called `maximumTapDuration` after a press, if it is still down.
+    mutating func holdElapsed() -> Outcome? {
+        guard holdsEnabled, let pressedAt, !usedInCombination else { return nil }
+        isHoldingToTalk = true
+        return .holdStarted(at: pressedAt)
+    }
+
+    mutating func released(at time: Date, otherModifiersHeld: Bool) -> Outcome? {
+        guard let pressedAt else { return nil }
+        self.pressedAt = nil
+        if isHoldingToTalk {
+            isHoldingToTalk = false
+            return .holdEnded(at: time)
+        }
+        let heldFor = time.timeIntervalSince(pressedAt)
+        guard !usedInCombination, heldFor < Self.maximumTapDuration, !otherModifiersHeld else { return nil }
+        return .tap
+    }
+}
+
 @MainActor
 final class ModifierHotkeyMonitor {
     var trigger: ModifierTrigger = .none {
         didSet { reset() }
     }
-    var onTap: (() -> Void)?
+    var holdsEnabled = false {
+        didSet { reset() }
+    }
+    var holdInterruption: HoldInterruption = .earlyOnly {
+        didSet { gesture.interruption = holdInterruption }
+    }
+    var onGesture: ((ModifierGesture.Outcome) -> Void)?
 
-    /// Longer than this and it was a hold, not a tap.
-    private let maximumTapDuration: TimeInterval = 0.6
+    /// Anything that makes a held modifier part of a shortcut: keys, clicks,
+    /// drags, ⇧-scroll, ⌃-scroll zoom, trackpad gestures.
+    private static let combinationEvents: NSEvent.EventTypeMask = [
+        .keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown,
+        .leftMouseDragged, .rightMouseDragged, .otherMouseDragged,
+        .scrollWheel, .magnify, .rotate, .swipe, .smartMagnify,
+    ]
 
     private var monitors: [Any] = []
-    private var isHolding = false
-    private var usedInCombination = false
-    private var pressedAt: Date?
+    private var gesture = ModifierGesture()
+    private var holdTimer: Task<Void, Never>?
 
     func start() {
         stop()
 
         // Global monitors observe other apps; local ones cover Yap's own windows.
         addGlobal(matching: .flagsChanged) { [weak self] event in self?.handleFlags(event) }
-        addGlobal(matching: [.keyDown, .leftMouseDown, .rightMouseDown]) { [weak self] _ in
-            self?.usedInCombination = true
+        addGlobal(matching: Self.combinationEvents) { [weak self] event in
+            self?.noteCombination(event)
         }
         addLocal(matching: .flagsChanged) { [weak self] event in self?.handleFlags(event) }
-        addLocal(matching: [.keyDown, .leftMouseDown, .rightMouseDown]) { [weak self] _ in
-            self?.usedInCombination = true
+        addLocal(matching: Self.combinationEvents) { [weak self] event in
+            self?.noteCombination(event)
         }
     }
 
@@ -111,39 +250,56 @@ final class ModifierHotkeyMonitor {
     }
 
     private func reset() {
-        isHolding = false
-        usedInCombination = false
-        pressedAt = nil
+        holdTimer?.cancel()
+        gesture = ModifierGesture(holdsEnabled: holdsEnabled, interruption: holdInterruption)
+    }
+
+    private func noteCombination(_ event: NSEvent) {
+        if event.type == .scrollWheel,
+           !Self.isDeliberateScroll(phase: event.phase, momentumPhase: event.momentumPhase) {
+            return
+        }
+        report(gesture.combined(at: Date(systemUptime: event.timestamp)))
+    }
+
+    /// Only a scroll the user is making counts. A fling keeps sending momentum
+    /// for a second after the fingers lift, and resting two fingers on the
+    /// trackpad sends a scroll that may never begin.
+    nonisolated static func isDeliberateScroll(phase: NSEvent.Phase, momentumPhase: NSEvent.Phase) -> Bool {
+        momentumPhase.isEmpty && !phase.contains(.mayBegin) && !phase.contains(.cancelled)
+    }
+
+    private func report(_ outcome: ModifierGesture.Outcome?) {
+        if let outcome { onGesture?(outcome) }
     }
 
     private func handleFlags(_ event: NSEvent) {
-        guard let keyCode = trigger.keyCode, let flag = trigger.flag else { return }
+        guard let keyCode = trigger.keyCode else { return }
 
         guard event.keyCode == keyCode else {
-            // A different modifier moved while ours was held — that's a combo.
-            if isHolding { usedInCombination = true }
+            noteCombination(event)
             return
         }
 
-        let isDown = event.modifierFlags.contains(flag)
-        if isDown {
-            isHolding = true
-            usedInCombination = false
-            pressedAt = Date()
+        let time = Date(systemUptime: event.timestamp)
+        if trigger.isDown(in: event.modifierFlags) {
+            let otherInputHeld = trigger.othersHeld(in: event.modifierFlags) || NSEvent.pressedMouseButtons != 0
+            gesture.pressed(at: time, otherInputHeld: otherInputHeld)
+            holdTimer?.cancel()
+            guard holdsEnabled else { return }
+            let wait = ModifierGesture.maximumTapDuration - Date().timeIntervalSince(time)
+            holdTimer = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(max(wait, 0)))
+                guard !Task.isCancelled, let self else { return }
+                self.report(self.gesture.holdElapsed())
+            }
             return
         }
 
-        guard isHolding else { return }
-        isHolding = false
-        let heldFor = pressedAt.map { Date().timeIntervalSince($0) } ?? .greatestFiniteMagnitude
-        pressedAt = nil
-
-        let noModifiersRemain = event.modifierFlags
+        holdTimer?.cancel()
+        let otherModifiersHeld = !event.modifierFlags
             .intersection(.deviceIndependentFlagsMask)
             .isEmpty
-
-        if !usedInCombination, heldFor < maximumTapDuration, noModifiersRemain {
-            onTap?()
-        }
+        report(gesture.released(at: time, otherModifiersHeld: otherModifiersHeld))
     }
 }

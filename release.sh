@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Builds, signs, notarizes, staples, and packages Yap for distribution.
+# Builds, signs, notarizes, staples, and packages Yap2Talk for distribution.
 #
 # Prerequisites (one-time):
 #   1. A "Developer ID Application" certificate in your keychain (create it in
@@ -9,11 +9,12 @@
 #        xcrun notarytool store-credentials yap-notary \
 #          --apple-id "you@example.com" --team-id "TEAMID" --password "app-specific-password"
 #
-# Output: dist/Yap.dmg — a notarized, stapled disk image ready to hand out.
+# Output: dist/Yap2Talk.dmg — a notarized, stapled disk image ready to hand out.
 
 set -euo pipefail
 
-APP="Yap"
+APP="Yap2Talk"
+PROJECT="Yap"
 SCHEME="Yap"
 CONFIG="Release"
 BUILD_DIR="build"
@@ -38,7 +39,7 @@ info "Generating project"
 xcodegen generate
 
 info "Building $CONFIG"
-xcodebuild -project "$APP.xcodeproj" -scheme "$SCHEME" -configuration "$CONFIG" \
+xcodebuild -project "$PROJECT.xcodeproj" -scheme "$SCHEME" -configuration "$CONFIG" \
   -destination 'platform=macOS' -derivedDataPath "$BUILD_DIR" \
   CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
   clean build | grep -E "error:|BUILD" || true

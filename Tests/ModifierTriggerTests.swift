@@ -1,0 +1,110 @@
+import AppKit
+import IOKit.hidsystem
+import Testing
+@testable import Yap
+
+struct ModifierTriggerTests {
+    private func flags(_ independent: NSEvent.ModifierFlags, device: UInt) -> NSEvent.ModifierFlags {
+        NSEvent.ModifierFlags(rawValue: independent.rawValue | device)
+    }
+
+    @Test func tellsRightShiftFromLeft() {
+        // With both down, letting go of Right Shift still reports `.shift`.
+        let leftShiftOnly = flags(.shift, device: 0x0000_0002)
+        #expect(!ModifierTrigger.rightShift.isDown(in: leftShiftOnly))
+        #expect(ModifierTrigger.leftShift.isDown(in: leftShiftOnly))
+        #expect(ModifierTrigger.rightShift.isDown(in: flags(.shift, device: 0x0000_0004)))
+    }
+
+    @Test func seesOtherModifiersAlreadyHeld() {
+        let commandAndRightShift = flags([.command, .shift], device: 0x0000_0008 | 0x0000_0004)
+        #expect(ModifierTrigger.rightShift.othersHeld(in: commandAndRightShift))
+        #expect(!ModifierTrigger.rightShift.othersHeld(in: flags(.shift, device: 0x0000_0004)))
+        #expect(ModifierTrigger.rightShift.othersHeld(in: flags(.shift, device: 0x0000_0002 | 0x0000_0004)))
+    }
+
+    @Test func fallsBackToTheSharedFlagWhenNoSideIsReported() {
+        // Software KVMs post modifier changes without the device bits.
+        #expect(ModifierTrigger.rightShift.isDown(in: .shift))
+        #expect(!ModifierTrigger.rightShift.isDown(in: .command))
+        #expect(!ModifierTrigger.rightShift.othersHeld(in: .shift))
+    }
+
+    @Test func seesOtherModifiersWhenNoSideIsReported() {
+        #expect(ModifierTrigger.rightShift.othersHeld(in: [.shift, .command]))
+        #expect(!ModifierTrigger.rightShift.othersHeld(in: .shift))
+    }
+
+    @Test func fnAloneDoesNotCountAsASide() {
+        #expect(ModifierTrigger.rightShift.isDown(in: [.shift, .function]))
+        #expect(ModifierTrigger.rightShift.othersHeld(in: [.shift, .function]))
+    }
+
+    @Test func fnHasNoSidesToTellApart() {
+        #expect(ModifierTrigger.function.isDown(in: .function))
+        #expect(!ModifierTrigger.function.othersHeld(in: .function))
+    }
+
+    @Test func fnCountsAsAnotherModifierForTheRest() {
+        #expect(ModifierTrigger.rightOption.othersHeld(in: flags([.option, .function], device: 0x0000_0040)))
+    }
+
+    @Test func eachTriggerFallsBackToItsOwnSharedFlag() {
+        let sharedFlags: [ModifierTrigger: NSEvent.ModifierFlags] = [
+            .leftControl: .control, .rightControl: .control,
+            .leftShift: .shift, .rightShift: .shift,
+            .leftCommand: .command, .rightCommand: .command,
+            .leftOption: .option, .rightOption: .option,
+            .function: .function,
+        ]
+        for (trigger, flag) in sharedFlags {
+            #expect(trigger.isDown(in: flag), "\(trigger)")
+            for (other, otherFlag) in sharedFlags where otherFlag != flag {
+                #expect(!other.isDown(in: flag), "\(other) with \(trigger)")
+            }
+        }
+    }
+
+    @Test func eachSideReadsItsOwnDeviceBit() {
+        let deviceBits: [ModifierTrigger: Int32] = [
+            .leftControl: NX_DEVICELCTLKEYMASK, .rightControl: NX_DEVICERCTLKEYMASK,
+            .leftShift: NX_DEVICELSHIFTKEYMASK, .rightShift: NX_DEVICERSHIFTKEYMASK,
+            .leftCommand: NX_DEVICELCMDKEYMASK, .rightCommand: NX_DEVICERCMDKEYMASK,
+            .leftOption: NX_DEVICELALTKEYMASK, .rightOption: NX_DEVICERALTKEYMASK,
+        ]
+        for (trigger, bit) in deviceBits {
+            let onlyThisSide = NSEvent.ModifierFlags(rawValue: UInt(bit))
+            #expect(trigger.isDown(in: onlyThisSide), "\(trigger)")
+            #expect(!trigger.othersHeld(in: onlyThisSide), "\(trigger)")
+            for other in deviceBits.keys where other != trigger {
+                #expect(!other.isDown(in: onlyThisSide), "\(other) with \(trigger)")
+                #expect(other.othersHeld(in: onlyThisSide), "\(other) with \(trigger)")
+            }
+        }
+    }
+}
+
+struct CombinationScrollTests {
+    @Test func wheelAndActiveTrackpadScrollsCount() {
+        #expect(ModifierHotkeyMonitor.isDeliberateScroll(phase: [], momentumPhase: []))
+        #expect(ModifierHotkeyMonitor.isDeliberateScroll(phase: .changed, momentumPhase: []))
+    }
+
+    @Test func momentumAndRestingFingersDoNot() {
+        // A fling keeps scrolling for a second after the fingers leave.
+        #expect(!ModifierHotkeyMonitor.isDeliberateScroll(phase: [], momentumPhase: .changed))
+        #expect(!ModifierHotkeyMonitor.isDeliberateScroll(phase: .mayBegin, momentumPhase: []))
+        #expect(!ModifierHotkeyMonitor.isDeliberateScroll(phase: .cancelled, momentumPhase: []))
+    }
+
+    @Test func scrollsThatBeginOrEndCount() {
+        #expect(ModifierHotkeyMonitor.isDeliberateScroll(phase: .began, momentumPhase: []))
+        #expect(ModifierHotkeyMonitor.isDeliberateScroll(phase: .ended, momentumPhase: []))
+    }
+
+    @Test func noPartOfAFlingCounts() {
+        #expect(!ModifierHotkeyMonitor.isDeliberateScroll(phase: [], momentumPhase: .began))
+        #expect(!ModifierHotkeyMonitor.isDeliberateScroll(phase: [], momentumPhase: .ended))
+    }
+
+}

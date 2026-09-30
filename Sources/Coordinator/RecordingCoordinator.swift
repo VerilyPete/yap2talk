@@ -9,6 +9,10 @@ final class RecordingCoordinator {
         case idle, recording, transcribing, inserting
     }
 
+    enum Trigger {
+        case shortcut, functionKey, modifier
+    }
+
     private(set) var state: State = .idle
     private(set) var lastOutcome: InjectionOutcome?
 
@@ -19,10 +23,20 @@ final class RecordingCoordinator {
     private let sounds: SoundPlaying
     private let cleaner: TranscriptCleaning
     private let cleanupEnabled: () -> Bool
+    private let holdToTalkEnabled: () -> Bool
     private let vocabulary: () -> [String]
     private let deviceName: () -> String?
 
     private var startedAt: Date?
+
+    // A stop or cancel that arrives while the session is still starting waits for the start to finish. Tearing down a half-built session throws away what was said and leaves the speech analyzer it was building running.
+    private enum PendingEnd { case finish, discard }
+    private var isStarting = false
+    private var endWhenStarted: PendingEnd?
+
+    // Hold to talk: a press that starts a dictation and is held past this finishes it on release, and only the release of that same trigger does. A quicker tap leaves it recording until the next press, as before.
+    private var held: (trigger: Trigger, since: Date)?
+    private let minimumHoldDuration: TimeInterval = 0.3
 
     private var cancelArmed = false
     private var cancelArmTask: Task<Void, Never>?
@@ -36,6 +50,7 @@ final class RecordingCoordinator {
         sounds: SoundPlaying,
         cleaner: TranscriptCleaning,
         cleanupEnabled: @escaping () -> Bool,
+        holdToTalkEnabled: @escaping () -> Bool,
         vocabulary: @escaping () -> [String],
         deviceName: @escaping () -> String?
     ) {
@@ -46,6 +61,7 @@ final class RecordingCoordinator {
         self.sounds = sounds
         self.cleaner = cleaner
         self.cleanupEnabled = cleanupEnabled
+        self.holdToTalkEnabled = holdToTalkEnabled
         self.vocabulary = vocabulary
         self.deviceName = deviceName
 
@@ -61,9 +77,14 @@ final class RecordingCoordinator {
     func cancel() async {
         guard state == .recording else { return }
         disarmCancel()
+        held = nil
         state = .transcribing
         sounds.playStop()
         hud.hide(after: 0)
+        guard !isStarting else {
+            endWhenStarted = .discard
+            return
+        }
         _ = try? await session.stop()
         state = .idle
     }
@@ -105,6 +126,21 @@ final class RecordingCoordinator {
         }
     }
 
+    func triggerPressed(_ trigger: Trigger, at time: Date) async {
+        held = state == .idle ? (trigger, time) : nil
+        await toggle()
+    }
+
+    func triggerReleased(_ trigger: Trigger, at time: Date) async {
+        guard let held, held.trigger == trigger else { return }
+        self.held = nil
+        guard holdToTalkEnabled(),
+              state == .recording,
+              time.timeIntervalSince(held.since) >= minimumHoldDuration
+        else { return }
+        await stopRecording()
+    }
+
     private func startRecording() async {
         // Capture the target app BEFORE any Yap UI appears, so the paste goes to where the user actually was.
         injector.captureTarget()
@@ -115,21 +151,48 @@ final class RecordingCoordinator {
         hud.show(device: deviceName())
         hud.setPhase(.listening)
 
+        isStarting = true
         do {
             try await session.start()
+            isStarting = false
         } catch {
+            isStarting = false
+            endWhenStarted = nil
+            held = nil
             NSLog("Yap: failed to start recording: \(error.localizedDescription)")
             hud.hide(after: 0)
             state = .idle
+            return
+        }
+
+        let pending = endWhenStarted
+        endWhenStarted = nil
+        switch pending {
+        case .finish:
+            await finishRecording()
+        case .discard:
+            _ = try? await session.stop()
+            state = .idle
+        case nil:
+            break
         }
     }
 
     private func stopRecording() async {
         disarmCancel()
+        held = nil
         state = .transcribing
         sounds.playStop()
         hud.setPhase(.transcribing)
 
+        guard !isStarting else {
+            endWhenStarted = .finish
+            return
+        }
+        await finishRecording()
+    }
+
+    private func finishRecording() async {
         do {
             let raw = try await session.stop()
             var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)

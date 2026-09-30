@@ -1,6 +1,6 @@
 name: Yap
 options:
-  bundleIdPrefix: com.frigade
+  bundleIdPrefix: org.verily
   deploymentTarget:
     macOS: "26.0"
   createIntermediateGroups: true
@@ -34,8 +34,9 @@ targets:
     settings:
       base:
         INFOPLIST_FILE: Sources/Info.plist
-        PRODUCT_BUNDLE_IDENTIFIER: com.frigade.Yap
-        PRODUCT_NAME: Yap
+        PRODUCT_BUNDLE_IDENTIFIER: org.verily.Yap2Talk
+        PRODUCT_NAME: Yap2Talk
+        PRODUCT_MODULE_NAME: Yap
         CODE_SIGN_STYLE: Manual
         CODE_SIGN_IDENTITY: "-"
         ENABLE_HARDENED_RUNTIME: NO
@@ -51,7 +52,9 @@ targets:
       - target: Yap
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.frigade.YapTests
+        PRODUCT_BUNDLE_IDENTIFIER: org.verily.Yap2TalkTests
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Yap2Talk.app/Contents/MacOS/Yap2Talk"
+        BUNDLE_LOADER: "$(TEST_HOST)"
         GENERATE_INFOPLIST_FILE: YES
 
 schemes:
