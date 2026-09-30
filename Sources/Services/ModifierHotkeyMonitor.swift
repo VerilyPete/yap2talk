@@ -44,15 +44,31 @@ enum ModifierTrigger: String, CaseIterable, Identifiable {
         }
     }
 
-    var flag: NSEvent.ModifierFlags? {
+    /// `NX_DEVICE…KEYMASK` bits. The shared `.shift`-style flag can't tell the
+    /// two sides apart: with both Shifts down, letting go of one still reports
+    /// `.shift`. fn has only the one key, so its own flag serves.
+    var deviceMask: UInt {
         switch self {
-        case .none: return nil
-        case .leftShift, .rightShift: return .shift
-        case .leftCommand, .rightCommand: return .command
-        case .leftOption, .rightOption: return .option
-        case .leftControl, .rightControl: return .control
-        case .function: return .function
+        case .none: return 0
+        case .leftControl: return 0x0000_0001
+        case .leftShift: return 0x0000_0002
+        case .rightShift: return 0x0000_0004
+        case .leftCommand: return 0x0000_0008
+        case .rightCommand: return 0x0000_0010
+        case .leftOption: return 0x0000_0020
+        case .rightOption: return 0x0000_0040
+        case .rightControl: return 0x0000_2000
+        case .function: return NSEvent.ModifierFlags.function.rawValue
         }
+    }
+
+    func isDown(in flags: NSEvent.ModifierFlags) -> Bool {
+        flags.rawValue & deviceMask != 0
+    }
+
+    func othersHeld(in flags: NSEvent.ModifierFlags) -> Bool {
+        let others = Self.allCases.reduce(0) { $0 | $1.deviceMask } & ~deviceMask
+        return flags.rawValue & others != 0
     }
 }
 
@@ -80,9 +96,11 @@ struct ModifierGesture {
         self.holdsEnabled = holdsEnabled
     }
 
-    mutating func pressed(at time: Date) {
+    /// A press made while another modifier or a mouse button is already down
+    /// is part of that combo from the start.
+    mutating func pressed(at time: Date, otherInputHeld: Bool = false) {
         pressedAt = time
-        usedInCombination = false
+        usedInCombination = otherInputHeld
         isHolding = false
     }
 
@@ -124,6 +142,14 @@ final class ModifierHotkeyMonitor {
     }
     var onGesture: ((ModifierGesture.Outcome) -> Void)?
 
+    /// Anything that makes a held modifier part of a shortcut: keys, clicks,
+    /// drags, ⇧-scroll, ⌃-scroll zoom, trackpad gestures.
+    private static let combinationEvents: NSEvent.EventTypeMask = [
+        .keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown,
+        .leftMouseDragged, .rightMouseDragged, .otherMouseDragged,
+        .scrollWheel, .magnify, .rotate, .swipe, .smartMagnify,
+    ]
+
     private var monitors: [Any] = []
     private var gesture = ModifierGesture()
     private var holdTimer: Task<Void, Never>?
@@ -133,11 +159,11 @@ final class ModifierHotkeyMonitor {
 
         // Global monitors observe other apps; local ones cover Yap's own windows.
         addGlobal(matching: .flagsChanged) { [weak self] event in self?.handleFlags(event) }
-        addGlobal(matching: [.keyDown, .leftMouseDown, .rightMouseDown]) { [weak self] _ in
+        addGlobal(matching: Self.combinationEvents) { [weak self] _ in
             self?.noteCombination()
         }
         addLocal(matching: .flagsChanged) { [weak self] event in self?.handleFlags(event) }
-        addLocal(matching: [.keyDown, .leftMouseDown, .rightMouseDown]) { [weak self] _ in
+        addLocal(matching: Self.combinationEvents) { [weak self] _ in
             self?.noteCombination()
         }
     }
@@ -179,7 +205,7 @@ final class ModifierHotkeyMonitor {
     }
 
     private func handleFlags(_ event: NSEvent) {
-        guard let keyCode = trigger.keyCode, let flag = trigger.flag else { return }
+        guard let keyCode = trigger.keyCode else { return }
 
         guard event.keyCode == keyCode else {
             noteCombination()
@@ -187,9 +213,11 @@ final class ModifierHotkeyMonitor {
         }
 
         let time = Date(systemUptime: event.timestamp)
-        if event.modifierFlags.contains(flag) {
-            gesture.pressed(at: time)
+        if trigger.isDown(in: event.modifierFlags) {
+            let otherInputHeld = trigger.othersHeld(in: event.modifierFlags) || NSEvent.pressedMouseButtons != 0
+            gesture.pressed(at: time, otherInputHeld: otherInputHeld)
             holdTimer?.cancel()
+            guard holdsEnabled else { return }
             let wait = ModifierGesture.maximumTapDuration - Date().timeIntervalSince(time)
             holdTimer = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(max(wait, 0)))

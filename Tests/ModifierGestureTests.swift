@@ -64,4 +64,12 @@ struct ModifierGestureTests {
         #expect(gesture.released(at: pressedAt, otherModifiersHeld: false) == nil)
         #expect(gesture.holdElapsed() == nil)
     }
+
+    @Test func pressMadeWhileOtherInputIsHeldIsNeitherTapNorHold() {
+        // Right Shift pressed with Command already down, or mid-drag.
+        var gesture = ModifierGesture(holdsEnabled: true)
+        gesture.pressed(at: pressedAt, otherInputHeld: true)
+        #expect(gesture.holdElapsed() == nil)
+        #expect(gesture.released(at: pressedAt.addingTimeInterval(0.2), otherModifiersHeld: false) == nil)
+    }
 }
