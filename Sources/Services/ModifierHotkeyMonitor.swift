@@ -64,7 +64,7 @@ enum ModifierTrigger: String, CaseIterable, Identifiable {
 
     /// Some software KVMs post modifier changes without any device bits; for
     /// those, the shared flag is all there is to go on.
-    private var sharedFlag: NSEvent.ModifierFlags {
+    private var flag: NSEvent.ModifierFlags {
         switch self {
         case .none: return []
         case .leftShift, .rightShift: return .shift
@@ -76,16 +76,22 @@ enum ModifierTrigger: String, CaseIterable, Identifiable {
     }
 
     private static let allDeviceMasks = allCases.reduce(0) { $0 | $1.deviceMask }
+    /// fn's mask is its shared flag, so it says nothing about whether the
+    /// event reports sides.
+    private static let sideMasks = allDeviceMasks & ~ModifierTrigger.function.deviceMask
 
     func isDown(in flags: NSEvent.ModifierFlags) -> Bool {
-        guard flags.rawValue & Self.allDeviceMasks != 0 else {
-            return self != .none && flags.contains(sharedFlag)
+        guard flags.rawValue & Self.sideMasks != 0 else {
+            return self != .none && flags.contains(flag)
         }
         return flags.rawValue & deviceMask != 0
     }
 
     func othersHeld(in flags: NSEvent.ModifierFlags) -> Bool {
-        flags.rawValue & (Self.allDeviceMasks & ~deviceMask) != 0
+        guard flags.rawValue & Self.sideMasks != 0 else {
+            return !flags.intersection([.shift, .control, .option, .command, .function]).subtracting(flag).isEmpty
+        }
+        return flags.rawValue & (Self.allDeviceMasks & ~deviceMask) != 0
     }
 }
 

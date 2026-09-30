@@ -30,6 +30,16 @@ struct ModifierTriggerTests {
         #expect(!ModifierTrigger.rightShift.othersHeld(in: .shift))
     }
 
+    @Test func seesOtherModifiersWhenNoSideIsReported() {
+        #expect(ModifierTrigger.rightShift.othersHeld(in: [.shift, .command]))
+        #expect(!ModifierTrigger.rightShift.othersHeld(in: .shift))
+    }
+
+    @Test func fnAloneDoesNotCountAsASide() {
+        #expect(ModifierTrigger.rightShift.isDown(in: [.shift, .function]))
+        #expect(ModifierTrigger.rightShift.othersHeld(in: [.shift, .function]))
+    }
+
     @Test func fnHasNoSidesToTellApart() {
         #expect(ModifierTrigger.function.isDown(in: .function))
         #expect(!ModifierTrigger.function.othersHeld(in: .function))
