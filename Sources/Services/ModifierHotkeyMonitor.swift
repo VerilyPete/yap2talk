@@ -63,7 +63,7 @@ struct ModifierGesture {
     enum Outcome: Equatable {
         case tap
         case holdStarted(at: Date)
-        case holdEnded
+        case holdEnded(at: Date)
         case holdAbandoned
     }
 
@@ -106,7 +106,7 @@ struct ModifierGesture {
         self.pressedAt = nil
         if isHolding {
             isHolding = false
-            return .holdEnded
+            return .holdEnded(at: time)
         }
         let heldFor = time.timeIntervalSince(pressedAt)
         guard !usedInCombination, heldFor < Self.maximumTapDuration, !otherModifiersHeld else { return nil }
@@ -186,11 +186,13 @@ final class ModifierHotkeyMonitor {
             return
         }
 
+        let time = Date(systemUptime: event.timestamp)
         if event.modifierFlags.contains(flag) {
-            gesture.pressed(at: Date())
+            gesture.pressed(at: time)
             holdTimer?.cancel()
+            let wait = ModifierGesture.maximumTapDuration - Date().timeIntervalSince(time)
             holdTimer = Task { [weak self] in
-                try? await Task.sleep(for: .seconds(ModifierGesture.maximumTapDuration))
+                try? await Task.sleep(for: .seconds(max(wait, 0)))
                 guard !Task.isCancelled, let self else { return }
                 self.report(self.gesture.holdElapsed())
             }
@@ -201,6 +203,6 @@ final class ModifierHotkeyMonitor {
         let otherModifiersHeld = !event.modifierFlags
             .intersection(.deviceIndependentFlagsMask)
             .isEmpty
-        report(gesture.released(at: Date(), otherModifiersHeld: otherModifiersHeld))
+        report(gesture.released(at: time, otherModifiersHeld: otherModifiersHeld))
     }
 }

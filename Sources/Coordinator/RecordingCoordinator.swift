@@ -122,12 +122,12 @@ final class RecordingCoordinator {
         }
     }
 
-    func triggerPressed(at time: Date = Date()) async {
+    func triggerPressed(at time: Date) async {
         heldSince = state == .idle ? time : nil
         await toggle()
     }
 
-    func triggerReleased(at time: Date = Date()) async {
+    func triggerReleased(at time: Date) async {
         guard let heldSince else { return }
         self.heldSince = nil
         guard holdToTalkEnabled(),

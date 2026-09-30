@@ -89,8 +89,8 @@ final class FunctionKeyMonitor {
     var trigger: FunctionKeyTrigger = .none {
         didSet { sync() }
     }
-    var onPress: (() -> Void)?
-    var onRelease: (() -> Void)?
+    var onPress: ((Date) -> Void)?
+    var onRelease: ((Date) -> Void)?
 
     private var tap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
@@ -185,13 +185,14 @@ final class FunctionKeyMonitor {
             return response
         }
 
+        let time = NSEvent(cgEvent: event).map { Date(systemUptime: $0.timestamp) } ?? Date()
         switch response {
         case .passThrough:
             return Unmanaged.passUnretained(event)
         case .press:
-            DispatchQueue.main.async { [weak self] in self?.onPress?() }
+            DispatchQueue.main.async { [weak self] in self?.onPress?(time) }
         case .release:
-            DispatchQueue.main.async { [weak self] in self?.onRelease?() }
+            DispatchQueue.main.async { [weak self] in self?.onRelease?(time) }
         case .swallow:
             break
         }

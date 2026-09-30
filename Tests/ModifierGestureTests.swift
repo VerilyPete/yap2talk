@@ -35,7 +35,7 @@ struct ModifierGestureTests {
         var gesture = ModifierGesture(holdsEnabled: true)
         gesture.pressed(at: pressedAt)
         #expect(gesture.holdElapsed() == .holdStarted(at: pressedAt))
-        #expect(gesture.released(at: pressedAt.addingTimeInterval(3), otherModifiersHeld: false) == .holdEnded)
+        #expect(gesture.released(at: pressedAt.addingTimeInterval(3), otherModifiersHeld: false) == .holdEnded(at: pressedAt.addingTimeInterval(3)))
     }
 
     @Test func aCombinationDuringAHoldAbandonsIt() {
