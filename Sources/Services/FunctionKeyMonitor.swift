@@ -188,13 +188,14 @@ final class FunctionKeyMonitor {
             return response
         }
 
-        let time = NSEvent(cgEvent: event).map { Date(systemUptime: $0.timestamp) } ?? Date()
         switch response {
         case .passThrough:
             return Unmanaged.passUnretained(event)
         case .press:
+            let time = Date(machTime: event.timestamp)
             DispatchQueue.main.async { [weak self] in self?.onPress?(time) }
         case .release:
+            let time = Date(machTime: event.timestamp)
             DispatchQueue.main.async { [weak self] in self?.onRelease?(time) }
         case .swallow:
             break
