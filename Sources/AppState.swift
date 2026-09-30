@@ -26,7 +26,10 @@ final class AppState {
     }
 
     var holdToTalkEnabled: Bool {
-        didSet { UserDefaults.standard.set(holdToTalkEnabled, forKey: "holdToTalkEnabled") }
+        didSet {
+            UserDefaults.standard.set(holdToTalkEnabled, forKey: "holdToTalkEnabled")
+            modifierHotkeys.holdsEnabled = holdToTalkEnabled
+        }
     }
 
     var mainPage: MainPage = .settings
@@ -159,11 +162,19 @@ final class AppState {
             }
         )
 
-        modifierHotkeys.onTap = { [weak self] in
+        modifierHotkeys.onGesture = { [weak self] gesture in
             guard let self else { return }
-            Task { await self.coordinator.toggle() }
+            Task {
+                switch gesture {
+                case .tap: await self.coordinator.toggle()
+                case .holdStarted(let pressedAt): await self.coordinator.triggerPressed(at: pressedAt)
+                case .holdEnded: await self.coordinator.triggerReleased()
+                case .holdAbandoned: await self.coordinator.cancel()
+                }
+            }
         }
         modifierHotkeys.trigger = modifierTrigger
+        modifierHotkeys.holdsEnabled = holdToTalkEnabled
         modifierHotkeys.start()
 
         functionKeys.onPress = { [weak self] in
