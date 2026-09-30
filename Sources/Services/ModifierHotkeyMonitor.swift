@@ -62,13 +62,30 @@ enum ModifierTrigger: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Some software KVMs post modifier changes without any device bits; for
+    /// those, the shared flag is all there is to go on.
+    private var sharedFlag: NSEvent.ModifierFlags {
+        switch self {
+        case .none: return []
+        case .leftShift, .rightShift: return .shift
+        case .leftCommand, .rightCommand: return .command
+        case .leftOption, .rightOption: return .option
+        case .leftControl, .rightControl: return .control
+        case .function: return .function
+        }
+    }
+
+    private static let allDeviceMasks = allCases.reduce(0) { $0 | $1.deviceMask }
+
     func isDown(in flags: NSEvent.ModifierFlags) -> Bool {
-        flags.rawValue & deviceMask != 0
+        guard flags.rawValue & Self.allDeviceMasks != 0 else {
+            return self != .none && flags.contains(sharedFlag)
+        }
+        return flags.rawValue & deviceMask != 0
     }
 
     func othersHeld(in flags: NSEvent.ModifierFlags) -> Bool {
-        let others = Self.allCases.reduce(0) { $0 | $1.deviceMask } & ~deviceMask
-        return flags.rawValue & others != 0
+        flags.rawValue & (Self.allDeviceMasks & ~deviceMask) != 0
     }
 }
 

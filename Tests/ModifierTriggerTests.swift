@@ -9,23 +9,30 @@ struct ModifierTriggerTests {
 
     @Test func tellsRightShiftFromLeft() {
         // With both down, letting go of Right Shift still reports `.shift`.
-        let leftShiftOnly = flags(.shift, device: 0x2)
+        let leftShiftOnly = flags(.shift, device: 0x0000_0002)
         #expect(!ModifierTrigger.rightShift.isDown(in: leftShiftOnly))
         #expect(ModifierTrigger.leftShift.isDown(in: leftShiftOnly))
-        #expect(ModifierTrigger.rightShift.isDown(in: flags(.shift, device: 0x4)))
+        #expect(ModifierTrigger.rightShift.isDown(in: flags(.shift, device: 0x0000_0004)))
     }
 
     @Test func seesOtherModifiersAlreadyHeld() {
-        let commandAndRightShift = flags([.command, .shift], device: 0x8 | 0x4)
+        let commandAndRightShift = flags([.command, .shift], device: 0x0000_0008 | 0x0000_0004)
         #expect(ModifierTrigger.rightShift.othersHeld(in: commandAndRightShift))
-        #expect(!ModifierTrigger.rightShift.othersHeld(in: flags(.shift, device: 0x4)))
-        #expect(ModifierTrigger.rightShift.othersHeld(in: flags(.shift, device: 0x2 | 0x4)))
+        #expect(!ModifierTrigger.rightShift.othersHeld(in: flags(.shift, device: 0x0000_0004)))
+        #expect(ModifierTrigger.rightShift.othersHeld(in: flags(.shift, device: 0x0000_0002 | 0x0000_0004)))
+    }
+
+    @Test func fallsBackToTheSharedFlagWhenNoSideIsReported() {
+        // Software KVMs post modifier changes without the device bits.
+        #expect(ModifierTrigger.rightShift.isDown(in: .shift))
+        #expect(!ModifierTrigger.rightShift.isDown(in: .command))
+        #expect(!ModifierTrigger.rightShift.othersHeld(in: .shift))
     }
 
     @Test func fnHasNoSidesToTellApart() {
         #expect(ModifierTrigger.function.isDown(in: .function))
         #expect(!ModifierTrigger.function.othersHeld(in: .function))
-        #expect(ModifierTrigger.rightOption.othersHeld(in: flags([.option, .function], device: 0x40)))
+        #expect(ModifierTrigger.rightOption.othersHeld(in: flags([.option, .function], device: 0x0000_0040)))
     }
 }
 
