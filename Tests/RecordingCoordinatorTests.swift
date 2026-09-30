@@ -10,12 +10,22 @@ final class FakeSession: DictationSessioning {
     var startCalled = 0
     var stopCalled = 0
     var startGate: (() async -> Void)?
+    var startError: Error?
+    var stopGate: (() async -> Void)?
+    var isRunning = false
 
     func start() async throws {
         startCalled += 1
         await startGate?()
+        if let startError { throw startError }
+        isRunning = true
     }
-    func stop() async throws -> String { stopCalled += 1; return textToReturn }
+    func stop() async throws -> String {
+        stopCalled += 1
+        await stopGate?()
+        isRunning = false
+        return textToReturn
+    }
 }
 
 @MainActor
@@ -100,6 +110,8 @@ private func makeCoordinator(
 
 @MainActor
 struct RecordingCoordinatorTests {
+    private let epoch = Date(timeIntervalSinceReferenceDate: 0)
+
     @Test func startsIdle() {
         let coordinator = makeCoordinator()
         #expect(coordinator.state == .idle)
@@ -142,7 +154,7 @@ struct RecordingCoordinatorTests {
         #expect(coordinator.lastOutcome == .pasted)
     }
 
-    @Test func stopDuringStartWaitsForTheStartToFinish() async {
+    @Test(.timeLimit(.minutes(1))) func stopDuringStartWaitsForTheStartToFinish() async {
         let session = FakeSession()
         var finishStart: CheckedContinuation<Void, Never>?
         session.startGate = { await withCheckedContinuation { finishStart = $0 } }
@@ -153,7 +165,7 @@ struct RecordingCoordinatorTests {
         while finishStart == nil { await Task.yield() }
         await coordinator.toggle()
 
-        // Stopping a half-built session would leave the microphone running unseen.
+        // Stopping a half-built session would throw away what was said.
         #expect(session.stopCalled == 0)
 
         finishStart?.resume()
@@ -223,6 +235,187 @@ struct RecordingCoordinatorTests {
 
         #expect(coordinator.state == .recording)
         #expect(session.stopCalled == 0)
+    }
+
+    @Test(.timeLimit(.minutes(1))) func cancelDuringStartDiscardsOnceTheStartFinishes() async {
+        let session = FakeSession()
+        var finishStart: CheckedContinuation<Void, Never>?
+        session.startGate = { await withCheckedContinuation { finishStart = $0 } }
+        let injector = FakeInjector()
+        let coordinator = makeCoordinator(session: session, injector: injector)
+
+        let starting = Task { await coordinator.toggle() }
+        while finishStart == nil { await Task.yield() }
+        await coordinator.cancel()
+        #expect(session.stopCalled == 0)
+
+        finishStart?.resume()
+        await starting.value
+
+        #expect(session.stopCalled == 1)
+        #expect(!session.isRunning)
+        #expect(injector.delivered.isEmpty)
+        #expect(coordinator.state == .idle)
+    }
+
+    @Test(.timeLimit(.minutes(1))) func pressAfterCancelDuringStartDoesNotStartASecondSession() async {
+        let session = FakeSession()
+        var finishStart: CheckedContinuation<Void, Never>?
+        session.startGate = {
+            guard finishStart == nil else { return }
+            await withCheckedContinuation { finishStart = $0 }
+        }
+        let coordinator = makeCoordinator(session: session)
+
+        let starting = Task { await coordinator.toggle() }
+        while finishStart == nil { await Task.yield() }
+        await coordinator.cancel()
+        await coordinator.toggle()
+        finishStart?.resume()
+        await starting.value
+
+        #expect(session.startCalled == 1)
+        #expect(coordinator.state == .idle)
+    }
+
+    @Test(.timeLimit(.minutes(1))) func deferredStopDoesNotCarryIntoTheNextDictation() async {
+        let session = FakeSession()
+        var finishStart: CheckedContinuation<Void, Never>?
+        session.startGate = { await withCheckedContinuation { finishStart = $0 } }
+        let coordinator = makeCoordinator(session: session)
+
+        let starting = Task { await coordinator.toggle() }
+        while finishStart == nil { await Task.yield() }
+        await coordinator.toggle()
+        finishStart?.resume()
+        await starting.value
+        session.startGate = nil
+
+        await coordinator.toggle()
+
+        #expect(coordinator.state == .recording)
+        #expect(session.stopCalled == 1)
+    }
+
+    @Test(.timeLimit(.minutes(1))) func stopPendingOnAFailedStartDoesNotCarryIntoTheNextDictation() async {
+        let session = FakeSession()
+        var finishStart: CheckedContinuation<Void, Never>?
+        session.startGate = { await withCheckedContinuation { finishStart = $0 } }
+        let coordinator = makeCoordinator(session: session)
+
+        let starting = Task { await coordinator.toggle() }
+        while finishStart == nil { await Task.yield() }
+        await coordinator.toggle()
+        session.startError = CancellationError()
+        finishStart?.resume()
+        await starting.value
+        #expect(coordinator.state == .idle)
+        session.startGate = nil
+        session.startError = nil
+
+        await coordinator.toggle()
+
+        #expect(coordinator.state == .recording)
+        #expect(session.stopCalled == 0)
+    }
+
+    @Test(.timeLimit(.minutes(1))) func releasingDuringTheStartFinishesOnceTheStartCompletes() async {
+        let session = FakeSession()
+        var finishStart: CheckedContinuation<Void, Never>?
+        session.startGate = { await withCheckedContinuation { finishStart = $0 } }
+        let injector = FakeInjector()
+        let coordinator = makeCoordinator(session: session, injector: injector)
+
+        let pressing = Task { await coordinator.triggerPressed(at: epoch) }
+        while finishStart == nil { await Task.yield() }
+        await coordinator.triggerReleased(at: epoch.addingTimeInterval(2))
+        #expect(session.stopCalled == 0)
+
+        finishStart?.resume()
+        await pressing.value
+
+        #expect(session.stopCalled == 1)
+        #expect(injector.delivered == ["hello world"])
+        #expect(coordinator.state == .idle)
+    }
+
+    @Test func pressHeldForExactlyTheMinimumIsAHold() async {
+        let session = FakeSession()
+        let coordinator = makeCoordinator(session: session)
+
+        await coordinator.triggerPressed(at: epoch)
+        await coordinator.triggerReleased(at: epoch.addingTimeInterval(0.3))
+
+        #expect(session.stopCalled == 1)
+        #expect(coordinator.state == .idle)
+    }
+
+    @Test func pressReleasedJustShortOfTheMinimumIsATap() async {
+        let session = FakeSession()
+        let coordinator = makeCoordinator(session: session)
+
+        await coordinator.triggerPressed(at: epoch)
+        await coordinator.triggerReleased(at: epoch.addingTimeInterval(0.29))
+
+        #expect(session.stopCalled == 0)
+        #expect(coordinator.state == .recording)
+    }
+
+    @Test func releaseWithNoPressBehindItDoesNothing() async {
+        let session = FakeSession()
+        let coordinator = makeCoordinator(session: session)
+
+        await coordinator.toggle()
+        await coordinator.triggerReleased(at: epoch.addingTimeInterval(5))
+
+        #expect(coordinator.state == .recording)
+        #expect(session.stopCalled == 0)
+    }
+
+    @Test func tapsReleaseIsSpentOnce() async {
+        let session = FakeSession()
+        let coordinator = makeCoordinator(session: session)
+
+        await coordinator.triggerPressed(at: epoch)
+        await coordinator.triggerReleased(at: epoch.addingTimeInterval(0.1))
+        await coordinator.triggerReleased(at: epoch.addingTimeInterval(2))
+
+        #expect(coordinator.state == .recording)
+        #expect(session.stopCalled == 0)
+    }
+
+    @Test func releaseOfACancelledHoldLeavesTheNextDictationAlone() async {
+        let session = FakeSession()
+        let coordinator = makeCoordinator(session: session)
+
+        await coordinator.triggerPressed(at: epoch)
+        await coordinator.cancel()
+        await coordinator.toggle()
+        await coordinator.triggerReleased(at: epoch.addingTimeInterval(2))
+
+        #expect(coordinator.state == .recording)
+        #expect(session.stopCalled == 1)
+    }
+
+    @Test(.timeLimit(.minutes(1))) func releaseOfAPressIgnoredWhileTranscribingLeavesTheNextDictationAlone() async {
+        let session = FakeSession()
+        var finishStop: CheckedContinuation<Void, Never>?
+        let coordinator = makeCoordinator(session: session)
+
+        await coordinator.toggle()
+        session.stopGate = { await withCheckedContinuation { finishStop = $0 } }
+        let stopping = Task { await coordinator.toggle() }
+        while finishStop == nil { await Task.yield() }
+        await coordinator.triggerPressed(at: epoch)
+        finishStop?.resume()
+        await stopping.value
+        session.stopGate = nil
+
+        await coordinator.toggle()
+        await coordinator.triggerReleased(at: epoch.addingTimeInterval(2))
+
+        #expect(coordinator.state == .recording)
+        #expect(session.stopCalled == 1)
     }
 
     @Test func emptyTranscriptIsNotSavedOrInserted() async {

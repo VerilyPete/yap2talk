@@ -25,9 +25,10 @@ final class RecordingCoordinator {
 
     private var startedAt: Date?
 
-    // A stop that arrives while the session is still starting waits for it; tearing down a half-built session would leave the microphone running unseen.
+    // A stop or cancel that arrives while the session is still starting waits for the start to finish. Tearing down a half-built session throws away what was said and leaves the speech analyzer it was building running.
+    private enum PendingEnd { case finish, discard }
     private var isStarting = false
-    private var stopWhenStarted = false
+    private var endWhenStarted: PendingEnd?
 
     // Hold to talk: a press that starts a dictation and is held past this finishes it on release. A quicker tap leaves it recording until the next press, as before.
     private var heldSince: Date?
@@ -72,9 +73,14 @@ final class RecordingCoordinator {
     func cancel() async {
         guard state == .recording else { return }
         disarmCancel()
+        heldSince = nil
         state = .transcribing
         sounds.playStop()
         hud.hide(after: 0)
+        guard !isStarting else {
+            endWhenStarted = .discard
+            return
+        }
         _ = try? await session.stop()
         state = .idle
     }
@@ -117,7 +123,7 @@ final class RecordingCoordinator {
     }
 
     func triggerPressed(at time: Date = Date()) async {
-        heldSince = time
+        heldSince = state == .idle ? time : nil
         await toggle()
     }
 
@@ -147,29 +153,41 @@ final class RecordingCoordinator {
             isStarting = false
         } catch {
             isStarting = false
-            stopWhenStarted = false
+            endWhenStarted = nil
             NSLog("Yap: failed to start recording: \(error.localizedDescription)")
             hud.hide(after: 0)
             state = .idle
             return
         }
 
-        if stopWhenStarted {
-            stopWhenStarted = false
-            await stopRecording()
+        let pending = endWhenStarted
+        endWhenStarted = nil
+        switch pending {
+        case .finish:
+            await finishRecording()
+        case .discard:
+            _ = try? await session.stop()
+            state = .idle
+        case nil:
+            break
         }
     }
 
     private func stopRecording() async {
-        guard !isStarting else {
-            stopWhenStarted = true
-            return
-        }
         disarmCancel()
+        heldSince = nil
         state = .transcribing
         sounds.playStop()
         hud.setPhase(.transcribing)
 
+        guard !isStarting else {
+            endWhenStarted = .finish
+            return
+        }
+        await finishRecording()
+    }
+
+    private func finishRecording() async {
         do {
             let raw = try await session.stop()
             var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
