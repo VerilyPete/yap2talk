@@ -32,6 +32,13 @@ final class AppState {
         }
     }
 
+    var holdInterruption: HoldInterruption {
+        didSet {
+            UserDefaults.standard.set(holdInterruption.rawValue, forKey: "holdInterruption")
+            modifierHotkeys.holdInterruption = holdInterruption
+        }
+    }
+
     var mainPage: MainPage = .settings
 
     var modifierTrigger: ModifierTrigger {
@@ -105,6 +112,9 @@ final class AppState {
         showInMenuBar = (UserDefaults.standard.object(forKey: "showInMenuBar") as? Bool) ?? true
         cleanupEnabled = (UserDefaults.standard.object(forKey: "cleanupEnabled") as? Bool) ?? false
         holdToTalkEnabled = (UserDefaults.standard.object(forKey: "holdToTalkEnabled") as? Bool) ?? true
+        holdInterruption = HoldInterruption(
+            rawValue: UserDefaults.standard.string(forKey: "holdInterruption") ?? ""
+        ) ?? .earlyOnly
         modifierTrigger = ModifierTrigger(
             rawValue: UserDefaults.standard.string(forKey: "modifierTrigger") ?? ""
         ) ?? .none
@@ -175,6 +185,7 @@ final class AppState {
         }
         modifierHotkeys.trigger = modifierTrigger
         modifierHotkeys.holdsEnabled = holdToTalkEnabled
+        modifierHotkeys.holdInterruption = holdInterruption
         modifierHotkeys.start()
 
         functionKeys.onPress = { [weak self] time in

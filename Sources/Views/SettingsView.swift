@@ -150,6 +150,27 @@ struct SettingsView: View {
                         subtitle: "Hold a trigger while you speak and let go to finish. A quick tap still starts and stops.",
                         isOn: $app.holdToTalkEnabled
                     )
+
+                    Divider().overlay(Theme.hairline).padding(.horizontal, Theme.s3)
+
+                    HStack(spacing: Theme.s3) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Discard a modifier hold").font(.system(size: 13, weight: .medium))
+                            Text("When another key or click comes in while you hold it.")
+                                .font(.system(size: 12)).foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: Theme.s3)
+                        Picker("", selection: $app.holdInterruption) {
+                            ForEach(HoldInterruption.allCases) { interruption in
+                                Text(interruption.title).tag(interruption)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(width: 168)
+                    }
+                    .padding(.horizontal, Theme.s3)
+                    .padding(.vertical, Theme.s2 + 2)
+                    .disabled(!app.holdToTalkEnabled || app.modifierTrigger == .none)
                 }
             }
         }

@@ -72,6 +72,23 @@ enum ModifierTrigger: String, CaseIterable, Identifiable {
     }
 }
 
+/// What another key, click or scroll does to a modifier hold that has already
+/// started recording: it may mean the hold was a shortcut after all, or just a
+/// click into the field being dictated into.
+enum HoldInterruption: String, CaseIterable, Identifiable {
+    case earlyOnly, anyTime, never
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .earlyOnly: return "In the first second"
+        case .anyTime: return "Any time"
+        case .never: return "Never"
+        }
+    }
+}
+
 /// "Clean" means pressed and released on its own — so holding Right Shift to
 /// type a capital letter never fires the trigger. A clean press released quickly
 /// is a tap; one held past `maximumTapDuration` becomes a hold until release,
@@ -87,14 +104,20 @@ struct ModifierGesture {
     /// Longer than this and it was a hold, not a tap.
     static let maximumTapDuration: TimeInterval = 0.6
 
+    /// How long after recording starts `.earlyOnly` still treats another key
+    /// as a sign the hold was a shortcut.
+    static let interruptionWindow: TimeInterval = 1
+
     let holdsEnabled: Bool
+    let interruption: HoldInterruption
 
     private var pressedAt: Date?
     private var usedInCombination = false
     private var isHoldingToTalk = false
 
-    init(holdsEnabled: Bool = false) {
+    init(holdsEnabled: Bool = false, interruption: HoldInterruption = .earlyOnly) {
         self.holdsEnabled = holdsEnabled
+        self.interruption = interruption
     }
 
     /// A press made while another modifier or a mouse button is already down
@@ -106,9 +129,15 @@ struct ModifierGesture {
     }
 
     /// Another key, modifier or click while ours is down — that's a combo.
-    mutating func combined() -> Outcome? {
+    mutating func combined(at time: Date) -> Outcome? {
         usedInCombination = true
-        guard isHoldingToTalk else { return nil }
+        guard isHoldingToTalk, let pressedAt else { return nil }
+        let recordingFor = time.timeIntervalSince(pressedAt) - Self.maximumTapDuration
+        switch interruption {
+        case .never: return nil
+        case .earlyOnly where recordingFor >= Self.interruptionWindow: return nil
+        case .earlyOnly, .anyTime: break
+        }
         isHoldingToTalk = false
         return .holdAbandoned
     }
@@ -141,6 +170,9 @@ final class ModifierHotkeyMonitor {
     var holdsEnabled = false {
         didSet { reset() }
     }
+    var holdInterruption: HoldInterruption = .earlyOnly {
+        didSet { reset() }
+    }
     var onGesture: ((ModifierGesture.Outcome) -> Void)?
 
     /// Anything that makes a held modifier part of a shortcut: keys, clicks,
@@ -160,12 +192,12 @@ final class ModifierHotkeyMonitor {
 
         // Global monitors observe other apps; local ones cover Yap's own windows.
         addGlobal(matching: .flagsChanged) { [weak self] event in self?.handleFlags(event) }
-        addGlobal(matching: Self.combinationEvents) { [weak self] _ in
-            self?.noteCombination()
+        addGlobal(matching: Self.combinationEvents) { [weak self] event in
+            self?.noteCombination(event)
         }
         addLocal(matching: .flagsChanged) { [weak self] event in self?.handleFlags(event) }
-        addLocal(matching: Self.combinationEvents) { [weak self] _ in
-            self?.noteCombination()
+        addLocal(matching: Self.combinationEvents) { [weak self] event in
+            self?.noteCombination(event)
         }
     }
 
@@ -194,11 +226,11 @@ final class ModifierHotkeyMonitor {
 
     private func reset() {
         holdTimer?.cancel()
-        gesture = ModifierGesture(holdsEnabled: holdsEnabled)
+        gesture = ModifierGesture(holdsEnabled: holdsEnabled, interruption: holdInterruption)
     }
 
-    private func noteCombination() {
-        report(gesture.combined())
+    private func noteCombination(_ event: NSEvent) {
+        report(gesture.combined(at: Date(systemUptime: event.timestamp)))
     }
 
     private func report(_ outcome: ModifierGesture.Outcome?) {
@@ -209,7 +241,7 @@ final class ModifierHotkeyMonitor {
         guard let keyCode = trigger.keyCode else { return }
 
         guard event.keyCode == keyCode else {
-            noteCombination()
+            noteCombination(event)
             return
         }
 

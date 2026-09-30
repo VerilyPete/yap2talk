@@ -21,7 +21,7 @@ struct ModifierGestureTests {
         // Right Shift held to type a capital letter.
         var gesture = ModifierGesture()
         gesture.pressed(at: pressedAt)
-        #expect(gesture.combined() == nil)
+        #expect(gesture.combined(at: pressedAt.addingTimeInterval(0.1)) == nil)
         #expect(gesture.released(at: pressedAt.addingTimeInterval(0.2), otherModifiersHeld: false) == nil)
     }
 
@@ -42,14 +42,14 @@ struct ModifierGestureTests {
         var gesture = ModifierGesture(holdsEnabled: true)
         gesture.pressed(at: pressedAt)
         _ = gesture.holdElapsed()
-        #expect(gesture.combined() == .holdAbandoned)
+        #expect(gesture.combined(at: pressedAt.addingTimeInterval(1)) == .holdAbandoned)
         #expect(gesture.released(at: pressedAt.addingTimeInterval(3), otherModifiersHeld: false) == nil)
     }
 
     @Test func combinationBeforeTheHoldPreventsIt() {
         var gesture = ModifierGesture(holdsEnabled: true)
         gesture.pressed(at: pressedAt)
-        _ = gesture.combined()
+        _ = gesture.combined(at: pressedAt.addingTimeInterval(0.1))
         #expect(gesture.holdElapsed() == nil)
     }
 
@@ -76,7 +76,7 @@ struct ModifierGestureTests {
     @Test func combinationDoesNotSpoilTheNextPress() {
         var gesture = ModifierGesture()
         gesture.pressed(at: pressedAt)
-        _ = gesture.combined()
+        _ = gesture.combined(at: pressedAt.addingTimeInterval(0.1))
         _ = gesture.released(at: pressedAt.addingTimeInterval(0.2), otherModifiersHeld: false)
         gesture.pressed(at: pressedAt.addingTimeInterval(5))
         #expect(gesture.released(at: pressedAt.addingTimeInterval(5.2), otherModifiersHeld: false) == .tap)
@@ -87,7 +87,7 @@ struct ModifierGestureTests {
         gesture.pressed(at: pressedAt)
         _ = gesture.holdElapsed()
         _ = gesture.released(at: pressedAt.addingTimeInterval(3), otherModifiersHeld: false)
-        #expect(gesture.combined() == nil)
+        #expect(gesture.combined(at: pressedAt.addingTimeInterval(0.1)) == nil)
     }
 
     @Test func releaseIsReportedOnce() {
@@ -115,5 +115,43 @@ struct ModifierGestureTests {
         var gesture = ModifierGesture()
         gesture.pressed(at: pressedAt)
         #expect(gesture.released(at: pressedAt.addingTimeInterval(0.59), otherModifiersHeld: false) == .tap)
+    }
+
+    @Test func keyEarlyInAHoldAbandonsItByDefault() {
+        var gesture = ModifierGesture(holdsEnabled: true)
+        gesture.pressed(at: pressedAt)
+        _ = gesture.holdElapsed()
+        #expect(gesture.combined(at: pressedAt.addingTimeInterval(1.59)) == .holdAbandoned)
+    }
+
+    @Test func keyLateInAHoldIsIgnoredByDefault() {
+        // Clicking into a field 20 seconds in shouldn't throw the dictation away.
+        var gesture = ModifierGesture(holdsEnabled: true)
+        gesture.pressed(at: pressedAt)
+        _ = gesture.holdElapsed()
+        #expect(gesture.combined(at: pressedAt.addingTimeInterval(1.6)) == nil)
+        #expect(gesture.released(at: pressedAt.addingTimeInterval(20), otherModifiersHeld: false) == .holdEnded(at: pressedAt.addingTimeInterval(20)))
+    }
+
+    @Test func holdCanBeAbandonedAtAnyTime() {
+        var gesture = ModifierGesture(holdsEnabled: true, interruption: .anyTime)
+        gesture.pressed(at: pressedAt)
+        _ = gesture.holdElapsed()
+        #expect(gesture.combined(at: pressedAt.addingTimeInterval(20)) == .holdAbandoned)
+    }
+
+    @Test func holdCanIgnoreInterruptionsEntirely() {
+        var gesture = ModifierGesture(holdsEnabled: true, interruption: .never)
+        gesture.pressed(at: pressedAt)
+        _ = gesture.holdElapsed()
+        #expect(gesture.combined(at: pressedAt.addingTimeInterval(0.7)) == nil)
+        #expect(gesture.released(at: pressedAt.addingTimeInterval(3), otherModifiersHeld: false) == .holdEnded(at: pressedAt.addingTimeInterval(3)))
+    }
+
+    @Test func combinationBeforeTheHoldPreventsItWhateverTheSetting() {
+        var gesture = ModifierGesture(holdsEnabled: true, interruption: .never)
+        gesture.pressed(at: pressedAt)
+        _ = gesture.combined(at: pressedAt.addingTimeInterval(0.1))
+        #expect(gesture.holdElapsed() == nil)
     }
 }
