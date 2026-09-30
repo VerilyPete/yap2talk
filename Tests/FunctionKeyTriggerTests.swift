@@ -99,4 +99,25 @@ struct FunctionKeyTriggerTests {
             isRepeat: false, heldKeyCode: Int64(kVK_F6)
         ) == .passThrough)
     }
+
+    @Test func anotherKeysKeyUpDuringAHoldIsNotTheRelease() {
+        #expect(FunctionKeyTrigger.response(
+            trigger: .f6, isKeyDown: false, keyCode: Int64(kVK_F7), flags: [],
+            isRepeat: false, heldKeyCode: Int64(kVK_F6)
+        ) == .passThrough)
+    }
+
+    @Test func anotherKeysRepeatsDuringAHoldPassThrough() {
+        #expect(FunctionKeyTrigger.response(
+            trigger: .f6, isKeyDown: true, keyCode: Int64(kVK_F7), flags: [],
+            isRepeat: true, heldKeyCode: Int64(kVK_F6)
+        ) == .passThrough)
+    }
+
+    @Test func releasingTheHeldKeyWithAModifierDownIsStillTheRelease() {
+        #expect(FunctionKeyTrigger.response(
+            trigger: .dictation, isKeyDown: false, keyCode: Int64(kVK_F5), flags: .maskCommand,
+            isRepeat: false, heldKeyCode: Int64(kVK_F5)
+        ) == .release)
+    }
 }

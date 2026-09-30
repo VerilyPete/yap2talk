@@ -104,6 +104,7 @@ final class FunctionKeyMonitor {
     /// keyboard tap — Yap should not be in the key event path at all unless
     /// the user asked for it.
     private func sync() {
+        heldKeyCode = nil
         if trigger == .none {
             uninstall()
         } else {
@@ -164,6 +165,8 @@ final class FunctionKeyMonitor {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             DispatchQueue.main.async { [weak self] in
                 guard let self, let tap = self.tap else { return }
+                // A key-up may have gone by while the tap was off.
+                self.heldKeyCode = nil
                 CGEvent.tapEnable(tap: tap, enable: true)
             }
             return Unmanaged.passUnretained(event)
