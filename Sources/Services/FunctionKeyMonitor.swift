@@ -104,7 +104,6 @@ final class FunctionKeyMonitor {
     /// keyboard tap — Yap should not be in the key event path at all unless
     /// the user asked for it.
     private func sync() {
-        heldKeyCode = nil
         if trigger == .none {
             uninstall()
         } else {
