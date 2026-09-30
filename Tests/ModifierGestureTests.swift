@@ -154,4 +154,12 @@ struct ModifierGestureTests {
         _ = gesture.combined(at: pressedAt.addingTimeInterval(0.1))
         #expect(gesture.holdElapsed() == nil)
     }
+
+    @Test func keyFromBeforeTheHoldBeganAbandonsItWhateverTheSetting() {
+        // Handled after the hold started, but typed before it.
+        var gesture = ModifierGesture(holdsEnabled: true, interruption: .never)
+        gesture.pressed(at: pressedAt)
+        _ = gesture.holdElapsed()
+        #expect(gesture.combined(at: pressedAt.addingTimeInterval(0.55)) == .holdAbandoned)
+    }
 }

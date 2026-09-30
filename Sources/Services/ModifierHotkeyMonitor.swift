@@ -132,7 +132,7 @@ struct ModifierGesture {
     static let interruptionWindow: TimeInterval = 1
 
     let holdsEnabled: Bool
-    let interruption: HoldInterruption
+    var interruption: HoldInterruption
 
     private var pressedAt: Date?
     private var usedInCombination = false
@@ -157,10 +157,11 @@ struct ModifierGesture {
         usedInCombination = true
         guard isHoldingToTalk, let pressedAt else { return nil }
         let recordingFor = time.timeIntervalSince(pressedAt) - Self.maximumTapDuration
+        // Input from before recording began was a shortcut, whatever the setting.
         switch interruption {
-        case .never: return nil
+        case .never where recordingFor >= 0: return nil
         case .earlyOnly where recordingFor >= Self.interruptionWindow: return nil
-        case .earlyOnly, .anyTime: break
+        case .never, .earlyOnly, .anyTime: break
         }
         isHoldingToTalk = false
         return .holdAbandoned
@@ -195,7 +196,7 @@ final class ModifierHotkeyMonitor {
         didSet { reset() }
     }
     var holdInterruption: HoldInterruption = .earlyOnly {
-        didSet { reset() }
+        didSet { gesture.interruption = holdInterruption }
     }
     var onGesture: ((ModifierGesture.Outcome) -> Void)?
 
