@@ -114,8 +114,8 @@ enum HoldInterruption: String, CaseIterable, Identifiable {
 
 /// "Clean" means pressed and released on its own — so holding Right Shift to
 /// type a capital letter never fires the trigger. A clean press released quickly
-/// is a tap; one held past `maximumTapDuration` becomes a hold until release,
-/// and a hold that turns out to be part of a combo after all is abandoned.
+/// is a tap; one held past `maximumTapDuration` becomes a hold until release.
+/// `interruption` decides whether a combo that follows abandons the hold.
 struct ModifierGesture {
     enum Outcome: Equatable {
         case tap

@@ -34,7 +34,7 @@ final class RecordingCoordinator {
     private var isStarting = false
     private var endWhenStarted: PendingEnd?
 
-    // Hold to talk: a press that starts a dictation and is held past this finishes it on release. A quicker tap leaves it recording until the next press, as before.
+    // Hold to talk: a press that starts a dictation and is held past this finishes it on release, and only the release of that same trigger does. A quicker tap leaves it recording until the next press, as before.
     private var held: (trigger: Trigger, since: Date)?
     private let minimumHoldDuration: TimeInterval = 0.3
 
@@ -126,7 +126,6 @@ final class RecordingCoordinator {
         }
     }
 
-    // A release only finishes the hold its own trigger started.
     func triggerPressed(_ trigger: Trigger, at time: Date) async {
         held = state == .idle ? (trigger, time) : nil
         await toggle()

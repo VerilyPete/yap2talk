@@ -1,5 +1,7 @@
 import Foundation
 
+/// Starting a dictation can hold the main thread, so holds are timed from
+/// when their events happened, never from when a callback got to run.
 extension Date {
     /// `NSEvent` timestamps count seconds from boot.
     init(systemUptime: TimeInterval) {

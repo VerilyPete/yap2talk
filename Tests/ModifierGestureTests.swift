@@ -83,11 +83,11 @@ struct ModifierGestureTests {
     }
 
     @Test func typingAfterAHoldEndsAbandonsNothing() {
-        var gesture = ModifierGesture(holdsEnabled: true)
+        var gesture = ModifierGesture(holdsEnabled: true, interruption: .anyTime)
         gesture.pressed(at: pressedAt)
         _ = gesture.holdElapsed()
         _ = gesture.released(at: pressedAt.addingTimeInterval(3), otherModifiersHeld: false)
-        #expect(gesture.combined(at: pressedAt.addingTimeInterval(0.1)) == nil)
+        #expect(gesture.combined(at: pressedAt.addingTimeInterval(3.1)) == nil)
     }
 
     @Test func releaseIsReportedOnce() {

@@ -155,8 +155,8 @@ struct SettingsView: View {
 
                     HStack(spacing: Theme.s3) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Discard a modifier hold").font(.system(size: 13, weight: .medium))
-                            Text("When another key or click comes in while you hold it.")
+                            Text("Discard a hold if another key is pressed").font(.system(size: 13, weight: .medium))
+                            Text(holdInterruptionSubtitle)
                                 .font(.system(size: 12)).foregroundStyle(.secondary)
                         }
                         Spacer(minLength: Theme.s3)
@@ -174,6 +174,12 @@ struct SettingsView: View {
                 }
             }
         }
+    }
+
+    private var holdInterruptionSubtitle: String {
+        if app.modifierTrigger == .none { return "Set a single modifier key above to use this." }
+        if !app.holdToTalkEnabled { return "Turn on Hold to talk to use this." }
+        return "For the single modifier key. Clicks and scrolls count too, since they usually mean a shortcut."
     }
 
     private var languageSection: some View {
