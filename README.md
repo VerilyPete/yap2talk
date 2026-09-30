@@ -8,6 +8,8 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-black.svg)](LICENSE) [![macOS 26+](https://img.shields.io/badge/macOS-26%2B-black.svg)](https://www.apple.com/macos/) [![Swift 6](https://img.shields.io/badge/Swift-6-black.svg)](https://swift.org)
 
+> **Yap2Talk** is a fork of [Yap](https://github.com/FrigadeHQ/yap) that adds hold to talk. It installs alongside Yap as its own app (`org.verily.Yap2Talk`) with its own settings, dictionary and history, so it starts fresh; build it with `./install.sh`. Quit Yap while you use it, or give the two different triggers: both answer the default `⌘⇧D`. The hold-to-talk changes live on the `hold-to-talk` branch, kept upstreamable.
+
 Press a shortcut, talk, press it again. Your words land in whatever text field you were using. No account, no API key, no audio leaving your machine.
 
 Built by [Frigade](https://frigade.com/?utm_source=yap&utm_medium=readme).

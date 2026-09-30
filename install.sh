@@ -9,7 +9,8 @@
 
 set -euo pipefail
 
-APP_NAME="Yap"
+APP_NAME="Yap2Talk"
+PROJECT_NAME="Yap"
 BUILD_DIR="build"
 INSTALL_DIR="/Applications"
 CONFIGURATION="${CONFIGURATION:-Release}"
@@ -34,8 +35,8 @@ xcodegen generate
 
 info "Building $APP_NAME ($CONFIGURATION)"
 xcodebuild \
-  -project "$APP_NAME.xcodeproj" \
-  -scheme "$APP_NAME" \
+  -project "$PROJECT_NAME.xcodeproj" \
+  -scheme "$PROJECT_NAME" \
   -configuration "$CONFIGURATION" \
   -destination 'platform=macOS' \
   -derivedDataPath "$BUILD_DIR" \

@@ -102,7 +102,14 @@ final class AppState {
 
     private init() {
         do {
-            modelContainer = try ModelContainer(for: Transcript.self)
+            // Not SwiftData's default store, which Yap itself also opens: the two
+            // apps would otherwise share, and migrate, one history.
+            let folder = URL.applicationSupportDirectory.appending(path: "Yap2Talk", directoryHint: .isDirectory)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            modelContainer = try ModelContainer(
+                for: Transcript.self,
+                configurations: ModelConfiguration(url: folder.appending(path: "History.store"))
+            )
         } catch {
             fatalError("Yap: failed to create model container: \(error)")
         }
