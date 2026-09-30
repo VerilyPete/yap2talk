@@ -28,7 +28,7 @@ enum ModifierTrigger: String, CaseIterable, Identifiable {
         }
     }
 
-    /// `flagsChanged` reports which key changed — the only way to tell left from right.
+    /// `flagsChanged` reports which key changed.
     var keyCode: UInt16? {
         switch self {
         case .none: return nil
@@ -145,7 +145,8 @@ struct ModifierGesture {
         isHoldingToTalk = false
     }
 
-    /// Another key, modifier or click while ours is down — that's a combo.
+    /// Another key, modifier, click, drag, scroll or gesture while ours is
+    /// down — that's a combo.
     mutating func combined(at time: Date) -> Outcome? {
         usedInCombination = true
         guard isHoldingToTalk, let pressedAt else { return nil }

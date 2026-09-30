@@ -22,7 +22,7 @@ https://github.com/user-attachments/assets/9bd8dae6-49d6-4c06-98b9-878e24dd401f
 
 Yap lives in your menu bar and waits for a shortcut. Trigger it and a small window appears near the bottom of the screen with a live waveform and a running preview of what you have said so far. Press the shortcut again and the text gets pasted into the app you were already working in. Every transcript is saved locally, so you can go back and copy something again later.
 
-The default shortcut is `⌘⇧D`. You can rebind it, or set a single modifier key instead. Tapping right shift on its own works nicely if you have a spare thumb. Tap it to start and again to stop, or hold it while you talk and let go to finish.
+The default shortcut is `⌘⇧D`. You can rebind it, or set a single modifier key instead. Tapping right shift on its own works nicely if you have a spare thumb. Whichever trigger you use, tap it to start and again to stop, or hold it while you talk and let go to finish.
 
 ## Install
 

@@ -33,6 +33,9 @@ struct ModifierTriggerTests {
     @Test func fnHasNoSidesToTellApart() {
         #expect(ModifierTrigger.function.isDown(in: .function))
         #expect(!ModifierTrigger.function.othersHeld(in: .function))
+    }
+
+    @Test func fnCountsAsAnotherModifierForTheRest() {
         #expect(ModifierTrigger.rightOption.othersHeld(in: flags([.option, .function], device: 0x0000_0040)))
     }
 }

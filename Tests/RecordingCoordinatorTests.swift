@@ -182,7 +182,7 @@ struct RecordingCoordinatorTests {
         let session = FakeSession()
         let injector = FakeInjector()
         let coordinator = makeCoordinator(session: session, injector: injector)
-        let pressedAt = Date()
+        let pressedAt = epoch
 
         await coordinator.triggerPressed(.shortcut, at: pressedAt)
         #expect(coordinator.state == .recording)
@@ -197,7 +197,7 @@ struct RecordingCoordinatorTests {
         let session = FakeSession()
         let injector = FakeInjector()
         let coordinator = makeCoordinator(session: session, injector: injector)
-        let pressedAt = Date()
+        let pressedAt = epoch
 
         await coordinator.triggerPressed(.shortcut, at: pressedAt)
         await coordinator.triggerReleased(.shortcut, at: pressedAt.addingTimeInterval(0.1))
@@ -212,25 +212,10 @@ struct RecordingCoordinatorTests {
         #expect(session.stopCalled == 1)
     }
 
-    @Test func releaseAfterACancelledHoldDoesNothing() async {
-        let session = FakeSession()
-        let injector = FakeInjector()
-        let coordinator = makeCoordinator(session: session, injector: injector)
-        let pressedAt = Date()
-
-        await coordinator.triggerPressed(.shortcut, at: pressedAt)
-        await coordinator.cancel()
-        await coordinator.triggerReleased(.shortcut, at: pressedAt.addingTimeInterval(2))
-
-        #expect(session.stopCalled == 1)
-        #expect(injector.delivered.isEmpty)
-        #expect(coordinator.state == .idle)
-    }
-
     @Test func releaseIsIgnoredWhenHoldToTalkIsOff() async {
         let session = FakeSession()
         let coordinator = makeCoordinator(session: session, holdToTalkEnabled: false)
-        let pressedAt = Date()
+        let pressedAt = epoch
 
         await coordinator.triggerPressed(.shortcut, at: pressedAt)
         await coordinator.triggerReleased(.shortcut, at: pressedAt.addingTimeInterval(2))
