@@ -33,6 +33,12 @@ struct FunctionKeyTriggerTests {
         #expect(!FunctionKeyTrigger.shouldFire(
             trigger: .f1, keyCode: Int64(kVK_F1), flags: .maskShift, isRepeat: false
         ))
+        #expect(!FunctionKeyTrigger.shouldFire(
+            trigger: .f1, keyCode: Int64(kVK_F1), flags: .maskAlternate, isRepeat: false
+        ))
+        #expect(!FunctionKeyTrigger.shouldFire(
+            trigger: .f1, keyCode: Int64(kVK_F1), flags: .maskControl, isRepeat: false
+        ))
     }
 
     @Test func allowsTheFnFlag() {
@@ -119,5 +125,13 @@ struct FunctionKeyTriggerTests {
             trigger: .dictation, isKeyDown: false, keyCode: Int64(kVK_F5), flags: .maskCommand,
             isRepeat: false, heldKeyCode: Int64(kVK_F5)
         ) == .release)
+    }
+
+    @Test func modifierComboOfTheTriggerKeyPassesThrough() {
+        // ⌘F5 is VoiceOver; the tap must hand it on, not swallow it as a press.
+        #expect(FunctionKeyTrigger.response(
+            trigger: .dictation, isKeyDown: true, keyCode: Int64(kVK_F5), flags: .maskCommand,
+            isRepeat: false, heldKeyCode: nil
+        ) == .passThrough)
     }
 }

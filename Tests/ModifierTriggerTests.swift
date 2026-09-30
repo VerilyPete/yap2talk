@@ -1,4 +1,5 @@
 import AppKit
+import IOKit.hidsystem
 import Testing
 @testable import Yap
 
@@ -47,5 +48,23 @@ struct CombinationScrollTests {
         #expect(!ModifierHotkeyMonitor.isDeliberateScroll(phase: [], momentumPhase: .changed))
         #expect(!ModifierHotkeyMonitor.isDeliberateScroll(phase: .mayBegin, momentumPhase: []))
         #expect(!ModifierHotkeyMonitor.isDeliberateScroll(phase: .cancelled, momentumPhase: []))
+    }
+
+    @Test func eachSideReadsItsOwnDeviceBit() {
+        let deviceBits: [ModifierTrigger: Int32] = [
+            .leftControl: NX_DEVICELCTLKEYMASK, .rightControl: NX_DEVICERCTLKEYMASK,
+            .leftShift: NX_DEVICELSHIFTKEYMASK, .rightShift: NX_DEVICERSHIFTKEYMASK,
+            .leftCommand: NX_DEVICELCMDKEYMASK, .rightCommand: NX_DEVICERCMDKEYMASK,
+            .leftOption: NX_DEVICELALTKEYMASK, .rightOption: NX_DEVICERALTKEYMASK,
+        ]
+        for (trigger, bit) in deviceBits {
+            let onlyThisSide = NSEvent.ModifierFlags(rawValue: UInt(bit))
+            #expect(trigger.isDown(in: onlyThisSide), "\(trigger)")
+            #expect(!trigger.othersHeld(in: onlyThisSide), "\(trigger)")
+            for other in deviceBits.keys where other != trigger {
+                #expect(!other.isDown(in: onlyThisSide), "\(other) with \(trigger)")
+                #expect(other.othersHeld(in: onlyThisSide), "\(other) with \(trigger)")
+            }
+        }
     }
 }

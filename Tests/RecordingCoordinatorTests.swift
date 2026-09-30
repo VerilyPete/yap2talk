@@ -67,8 +67,9 @@ final class FakeHUD: HUDControlling {
 }
 
 final class FakeSounds: SoundPlaying {
+    var stops = 0
     func playStart() {}
-    func playStop() {}
+    func playStop() { stops += 1 }
 }
 
 @MainActor
@@ -89,6 +90,7 @@ private func makeCoordinator(
     injector: FakeInjector? = nil,
     history: FakeHistory? = nil,
     hud: FakeHUD? = nil,
+    sounds: FakeSounds? = nil,
     cleaner: FakeCleaner? = nil,
     cleanupEnabled: Bool = false,
     holdToTalkEnabled: Bool = true,
@@ -99,7 +101,7 @@ private func makeCoordinator(
         injector: injector ?? FakeInjector(),
         history: history ?? FakeHistory(),
         hud: hud ?? FakeHUD(),
-        sounds: FakeSounds(),
+        sounds: sounds ?? FakeSounds(),
         cleaner: cleaner ?? FakeCleaner(),
         cleanupEnabled: { cleanupEnabled },
         holdToTalkEnabled: { holdToTalkEnabled },
@@ -339,6 +341,114 @@ struct RecordingCoordinatorTests {
         #expect(coordinator.state == .idle)
     }
 
+    @Test(.timeLimit(.minutes(1))) func stopDuringStartReportsTheStopStraightAway() async {
+        let session = FakeSession()
+        var finishStart: CheckedContinuation<Void, Never>?
+        session.startGate = { await withCheckedContinuation { finishStart = $0 } }
+        let hud = FakeHUD()
+        let sounds = FakeSounds()
+        let coordinator = makeCoordinator(session: session, hud: hud, sounds: sounds)
+
+        let starting = Task { await coordinator.toggle() }
+        while finishStart == nil { await Task.yield() }
+        await coordinator.toggle()
+
+        #expect(coordinator.state == .transcribing)
+        #expect(hud.phases == [.listening, .transcribing])
+        #expect(sounds.stops == 1)
+
+        finishStart?.resume()
+        await starting.value
+
+        #expect(hud.phases == [.listening, .transcribing])
+        #expect(sounds.stops == 1)
+    }
+
+    @Test(.timeLimit(.minutes(1))) func cancelDuringStartReportsTheCancelStraightAway() async {
+        let session = FakeSession()
+        var finishStart: CheckedContinuation<Void, Never>?
+        session.startGate = { await withCheckedContinuation { finishStart = $0 } }
+        let hud = FakeHUD()
+        let sounds = FakeSounds()
+        let coordinator = makeCoordinator(session: session, hud: hud, sounds: sounds)
+
+        let starting = Task { await coordinator.toggle() }
+        while finishStart == nil { await Task.yield() }
+        await coordinator.cancel()
+
+        #expect(coordinator.state == .transcribing)
+        #expect(hud.hidden == 1)
+        #expect(sounds.stops == 1)
+
+        finishStart?.resume()
+        await starting.value
+    }
+
+    @Test(.timeLimit(.minutes(1))) func pressDuringADeferredCancelDoesNotRescueTheDictation() async {
+        let session = FakeSession()
+        var finishStart: CheckedContinuation<Void, Never>?
+        session.startGate = { await withCheckedContinuation { finishStart = $0 } }
+        let injector = FakeInjector()
+        let history = FakeHistory()
+        let coordinator = makeCoordinator(session: session, injector: injector, history: history)
+
+        let starting = Task { await coordinator.toggle() }
+        while finishStart == nil { await Task.yield() }
+        await coordinator.cancel()
+        await coordinator.triggerPressed(.shortcut, at: epoch)
+        finishStart?.resume()
+        await starting.value
+
+        #expect(session.stopCalled == 1)
+        #expect(injector.delivered.isEmpty)
+        #expect(history.saved.isEmpty)
+        #expect(coordinator.state == .idle)
+    }
+
+    @Test func releaseOfAHoldFinishedFromTheHUDLeavesTheNextDictationAlone() async {
+        let session = FakeSession()
+        let coordinator = makeCoordinator(session: session)
+
+        await coordinator.triggerPressed(.shortcut, at: epoch)
+        await coordinator.toggle()
+        #expect(coordinator.state == .idle)
+        await coordinator.toggle()
+        await coordinator.triggerReleased(.shortcut, at: epoch.addingTimeInterval(2))
+
+        #expect(coordinator.state == .recording)
+        #expect(session.stopCalled == 1)
+    }
+
+    @Test func escapeArmedInAFinishedDictationDoesNotCarryIntoTheNext() async {
+        let hud = FakeHUD()
+        let coordinator = makeCoordinator(hud: hud)
+
+        await coordinator.toggle()
+        coordinator.handleEscape()
+        await coordinator.toggle()
+        await coordinator.toggle()
+        coordinator.handleEscape()
+        try? await Task.sleep(nanoseconds: 100_000_000)
+
+        #expect(coordinator.state == .recording)
+        #expect(hud.phases.last == .confirmCancel)
+    }
+
+    @Test func escapeArmedInACancelledDictationDoesNotCarryIntoTheNext() async {
+        let hud = FakeHUD()
+        let coordinator = makeCoordinator(hud: hud)
+
+        await coordinator.toggle()
+        coordinator.handleEscape()
+        await coordinator.cancel()
+        await coordinator.toggle()
+        coordinator.handleEscape()
+        try? await Task.sleep(nanoseconds: 100_000_000)
+
+        #expect(coordinator.state == .recording)
+        #expect(hud.phases.last == .confirmCancel)
+    }
+
     @Test func pressHeldForExactlyTheMinimumIsAHold() async {
         let session = FakeSession()
         let coordinator = makeCoordinator(session: session)
@@ -479,13 +589,15 @@ struct RecordingCoordinatorTests {
         let session = FakeSession()
         let injector = FakeInjector()
         let history = FakeHistory()
-        let coordinator = makeCoordinator(session: session, injector: injector, history: history)
+        let hud = FakeHUD()
+        let coordinator = makeCoordinator(session: session, injector: injector, history: history, hud: hud)
 
         await coordinator.toggle()
         await coordinator.cancel()
 
         #expect(coordinator.state == .idle)
         #expect(session.stopCalled == 1) // capture is still torn down
+        #expect(hud.hidden == 1)
         #expect(injector.delivered.isEmpty)
         #expect(history.saved.isEmpty)
     }
