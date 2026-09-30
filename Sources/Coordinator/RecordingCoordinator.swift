@@ -9,6 +9,10 @@ final class RecordingCoordinator {
         case idle, recording, transcribing, inserting
     }
 
+    enum Trigger {
+        case shortcut, functionKey, modifier
+    }
+
     private(set) var state: State = .idle
     private(set) var lastOutcome: InjectionOutcome?
 
@@ -31,7 +35,7 @@ final class RecordingCoordinator {
     private var endWhenStarted: PendingEnd?
 
     // Hold to talk: a press that starts a dictation and is held past this finishes it on release. A quicker tap leaves it recording until the next press, as before.
-    private var heldSince: Date?
+    private var held: (trigger: Trigger, since: Date)?
     private let minimumHoldDuration: TimeInterval = 0.3
 
     private var cancelArmed = false
@@ -73,7 +77,7 @@ final class RecordingCoordinator {
     func cancel() async {
         guard state == .recording else { return }
         disarmCancel()
-        heldSince = nil
+        held = nil
         state = .transcribing
         sounds.playStop()
         hud.hide(after: 0)
@@ -122,17 +126,18 @@ final class RecordingCoordinator {
         }
     }
 
-    func triggerPressed(at time: Date) async {
-        heldSince = state == .idle ? time : nil
+    // A release only finishes the hold its own trigger started.
+    func triggerPressed(_ trigger: Trigger, at time: Date) async {
+        held = state == .idle ? (trigger, time) : nil
         await toggle()
     }
 
-    func triggerReleased(at time: Date) async {
-        guard let heldSince else { return }
-        self.heldSince = nil
+    func triggerReleased(_ trigger: Trigger, at time: Date) async {
+        guard let held, held.trigger == trigger else { return }
+        self.held = nil
         guard holdToTalkEnabled(),
               state == .recording,
-              time.timeIntervalSince(heldSince) >= minimumHoldDuration
+              time.timeIntervalSince(held.since) >= minimumHoldDuration
         else { return }
         await stopRecording()
     }
@@ -154,6 +159,7 @@ final class RecordingCoordinator {
         } catch {
             isStarting = false
             endWhenStarted = nil
+            held = nil
             NSLog("Yap: failed to start recording: \(error.localizedDescription)")
             hud.hide(after: 0)
             state = .idle
@@ -175,7 +181,7 @@ final class RecordingCoordinator {
 
     private func stopRecording() async {
         disarmCancel()
-        heldSince = nil
+        held = nil
         state = .transcribing
         sounds.playStop()
         hud.setPhase(.transcribing)

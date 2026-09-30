@@ -182,9 +182,9 @@ struct RecordingCoordinatorTests {
         let coordinator = makeCoordinator(session: session, injector: injector)
         let pressedAt = Date()
 
-        await coordinator.triggerPressed(at: pressedAt)
+        await coordinator.triggerPressed(.shortcut, at: pressedAt)
         #expect(coordinator.state == .recording)
-        await coordinator.triggerReleased(at: pressedAt.addingTimeInterval(2))
+        await coordinator.triggerReleased(.shortcut, at: pressedAt.addingTimeInterval(2))
 
         #expect(session.stopCalled == 1)
         #expect(injector.delivered == ["hello world"])
@@ -197,15 +197,15 @@ struct RecordingCoordinatorTests {
         let coordinator = makeCoordinator(session: session, injector: injector)
         let pressedAt = Date()
 
-        await coordinator.triggerPressed(at: pressedAt)
-        await coordinator.triggerReleased(at: pressedAt.addingTimeInterval(0.1))
+        await coordinator.triggerPressed(.shortcut, at: pressedAt)
+        await coordinator.triggerReleased(.shortcut, at: pressedAt.addingTimeInterval(0.1))
         #expect(coordinator.state == .recording)
 
-        await coordinator.triggerPressed(at: pressedAt.addingTimeInterval(3))
+        await coordinator.triggerPressed(.shortcut, at: pressedAt.addingTimeInterval(3))
         #expect(injector.delivered == ["hello world"])
 
         // The press already finished it; its release has nothing left to do.
-        await coordinator.triggerReleased(at: pressedAt.addingTimeInterval(6))
+        await coordinator.triggerReleased(.shortcut, at: pressedAt.addingTimeInterval(6))
         #expect(session.startCalled == 1)
         #expect(session.stopCalled == 1)
     }
@@ -216,9 +216,9 @@ struct RecordingCoordinatorTests {
         let coordinator = makeCoordinator(session: session, injector: injector)
         let pressedAt = Date()
 
-        await coordinator.triggerPressed(at: pressedAt)
+        await coordinator.triggerPressed(.shortcut, at: pressedAt)
         await coordinator.cancel()
-        await coordinator.triggerReleased(at: pressedAt.addingTimeInterval(2))
+        await coordinator.triggerReleased(.shortcut, at: pressedAt.addingTimeInterval(2))
 
         #expect(session.stopCalled == 1)
         #expect(injector.delivered.isEmpty)
@@ -230,8 +230,8 @@ struct RecordingCoordinatorTests {
         let coordinator = makeCoordinator(session: session, holdToTalkEnabled: false)
         let pressedAt = Date()
 
-        await coordinator.triggerPressed(at: pressedAt)
-        await coordinator.triggerReleased(at: pressedAt.addingTimeInterval(2))
+        await coordinator.triggerPressed(.shortcut, at: pressedAt)
+        await coordinator.triggerReleased(.shortcut, at: pressedAt.addingTimeInterval(2))
 
         #expect(coordinator.state == .recording)
         #expect(session.stopCalled == 0)
@@ -326,9 +326,9 @@ struct RecordingCoordinatorTests {
         let injector = FakeInjector()
         let coordinator = makeCoordinator(session: session, injector: injector)
 
-        let pressing = Task { await coordinator.triggerPressed(at: epoch) }
+        let pressing = Task { await coordinator.triggerPressed(.shortcut, at: epoch) }
         while finishStart == nil { await Task.yield() }
-        await coordinator.triggerReleased(at: epoch.addingTimeInterval(2))
+        await coordinator.triggerReleased(.shortcut, at: epoch.addingTimeInterval(2))
         #expect(session.stopCalled == 0)
 
         finishStart?.resume()
@@ -343,8 +343,8 @@ struct RecordingCoordinatorTests {
         let session = FakeSession()
         let coordinator = makeCoordinator(session: session)
 
-        await coordinator.triggerPressed(at: epoch)
-        await coordinator.triggerReleased(at: epoch.addingTimeInterval(0.3))
+        await coordinator.triggerPressed(.shortcut, at: epoch)
+        await coordinator.triggerReleased(.shortcut, at: epoch.addingTimeInterval(0.3))
 
         #expect(session.stopCalled == 1)
         #expect(coordinator.state == .idle)
@@ -354,8 +354,8 @@ struct RecordingCoordinatorTests {
         let session = FakeSession()
         let coordinator = makeCoordinator(session: session)
 
-        await coordinator.triggerPressed(at: epoch)
-        await coordinator.triggerReleased(at: epoch.addingTimeInterval(0.29))
+        await coordinator.triggerPressed(.shortcut, at: epoch)
+        await coordinator.triggerReleased(.shortcut, at: epoch.addingTimeInterval(0.29))
 
         #expect(session.stopCalled == 0)
         #expect(coordinator.state == .recording)
@@ -366,7 +366,7 @@ struct RecordingCoordinatorTests {
         let coordinator = makeCoordinator(session: session)
 
         await coordinator.toggle()
-        await coordinator.triggerReleased(at: epoch.addingTimeInterval(5))
+        await coordinator.triggerReleased(.shortcut, at: epoch.addingTimeInterval(5))
 
         #expect(coordinator.state == .recording)
         #expect(session.stopCalled == 0)
@@ -376,9 +376,9 @@ struct RecordingCoordinatorTests {
         let session = FakeSession()
         let coordinator = makeCoordinator(session: session)
 
-        await coordinator.triggerPressed(at: epoch)
-        await coordinator.triggerReleased(at: epoch.addingTimeInterval(0.1))
-        await coordinator.triggerReleased(at: epoch.addingTimeInterval(2))
+        await coordinator.triggerPressed(.shortcut, at: epoch)
+        await coordinator.triggerReleased(.shortcut, at: epoch.addingTimeInterval(0.1))
+        await coordinator.triggerReleased(.shortcut, at: epoch.addingTimeInterval(2))
 
         #expect(coordinator.state == .recording)
         #expect(session.stopCalled == 0)
@@ -388,10 +388,10 @@ struct RecordingCoordinatorTests {
         let session = FakeSession()
         let coordinator = makeCoordinator(session: session)
 
-        await coordinator.triggerPressed(at: epoch)
+        await coordinator.triggerPressed(.shortcut, at: epoch)
         await coordinator.cancel()
         await coordinator.toggle()
-        await coordinator.triggerReleased(at: epoch.addingTimeInterval(2))
+        await coordinator.triggerReleased(.shortcut, at: epoch.addingTimeInterval(2))
 
         #expect(coordinator.state == .recording)
         #expect(session.stopCalled == 1)
@@ -406,16 +406,43 @@ struct RecordingCoordinatorTests {
         session.stopGate = { await withCheckedContinuation { finishStop = $0 } }
         let stopping = Task { await coordinator.toggle() }
         while finishStop == nil { await Task.yield() }
-        await coordinator.triggerPressed(at: epoch)
+        await coordinator.triggerPressed(.shortcut, at: epoch)
         finishStop?.resume()
         await stopping.value
         session.stopGate = nil
 
         await coordinator.toggle()
-        await coordinator.triggerReleased(at: epoch.addingTimeInterval(2))
+        await coordinator.triggerReleased(.shortcut, at: epoch.addingTimeInterval(2))
 
         #expect(coordinator.state == .recording)
         #expect(session.stopCalled == 1)
+    }
+
+    @Test func releaseOfAnotherTriggerLeavesTheHoldAlone() async {
+        let session = FakeSession()
+        let coordinator = makeCoordinator(session: session)
+
+        await coordinator.triggerPressed(.functionKey, at: epoch)
+        await coordinator.cancel()
+        await coordinator.triggerPressed(.shortcut, at: epoch.addingTimeInterval(1))
+        await coordinator.triggerReleased(.functionKey, at: epoch.addingTimeInterval(2))
+        #expect(coordinator.state == .recording)
+
+        await coordinator.triggerReleased(.shortcut, at: epoch.addingTimeInterval(3))
+        #expect(coordinator.state == .idle)
+    }
+
+    @Test func failedStartDisarmsItsRelease() async {
+        let session = FakeSession()
+        session.startError = CancellationError()
+        let coordinator = makeCoordinator(session: session)
+
+        await coordinator.triggerPressed(.shortcut, at: epoch)
+        session.startError = nil
+        await coordinator.toggle()
+        await coordinator.triggerReleased(.shortcut, at: epoch.addingTimeInterval(2))
+
+        #expect(coordinator.state == .recording)
     }
 
     @Test func emptyTranscriptIsNotSavedOrInserted() async {

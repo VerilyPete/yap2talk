@@ -164,11 +164,11 @@ final class AppState {
         hotkeys.onTrigger(
             pressed: { [weak self] time in
                 guard let self else { return }
-                Task { await self.coordinator.triggerPressed(at: time) }
+                Task { await self.coordinator.triggerPressed(.shortcut, at: time) }
             },
             released: { [weak self] time in
                 guard let self else { return }
-                Task { await self.coordinator.triggerReleased(at: time) }
+                Task { await self.coordinator.triggerReleased(.shortcut, at: time) }
             }
         )
 
@@ -177,8 +177,8 @@ final class AppState {
             Task {
                 switch gesture {
                 case .tap: await self.coordinator.toggle()
-                case .holdStarted(let pressedAt): await self.coordinator.triggerPressed(at: pressedAt)
-                case .holdEnded(let releasedAt): await self.coordinator.triggerReleased(at: releasedAt)
+                case .holdStarted(let pressedAt): await self.coordinator.triggerPressed(.modifier, at: pressedAt)
+                case .holdEnded(let releasedAt): await self.coordinator.triggerReleased(.modifier, at: releasedAt)
                 case .holdAbandoned: await self.coordinator.cancel()
                 }
             }
@@ -190,11 +190,11 @@ final class AppState {
 
         functionKeys.onPress = { [weak self] time in
             guard let self else { return }
-            Task { await self.coordinator.triggerPressed(at: time) }
+            Task { await self.coordinator.triggerPressed(.functionKey, at: time) }
         }
         functionKeys.onRelease = { [weak self] time in
             guard let self else { return }
-            Task { await self.coordinator.triggerReleased(at: time) }
+            Task { await self.coordinator.triggerReleased(.functionKey, at: time) }
         }
         functionKeys.trigger = functionKeyTrigger
         functionKeys.start()
