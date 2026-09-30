@@ -164,13 +164,6 @@ final class FunctionKeyMonitor {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             DispatchQueue.main.async { [weak self] in
                 guard let self, let tap = self.tap else { return }
-                // A key-up may have gone by while the tap was off. Starting a
-                // dictation can stall the main thread long enough for this to
-                // happen mid-hold, so only forget a key that is really up.
-                if let held = self.heldKeyCode,
-                   !CGEventSource.keyState(.hidSystemState, key: CGKeyCode(held)) {
-                    self.heldKeyCode = nil
-                }
                 CGEvent.tapEnable(tap: tap, enable: true)
             }
             return Unmanaged.passUnretained(event)
