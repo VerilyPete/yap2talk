@@ -230,7 +230,18 @@ final class ModifierHotkeyMonitor {
     }
 
     private func noteCombination(_ event: NSEvent) {
+        if event.type == .scrollWheel,
+           !Self.isDeliberateScroll(phase: event.phase, momentumPhase: event.momentumPhase) {
+            return
+        }
         report(gesture.combined(at: Date(systemUptime: event.timestamp)))
+    }
+
+    /// Only a scroll the user is making counts. A fling keeps sending momentum
+    /// for a second after the fingers lift, and resting two fingers on the
+    /// trackpad sends a scroll that may never begin.
+    nonisolated static func isDeliberateScroll(phase: NSEvent.Phase, momentumPhase: NSEvent.Phase) -> Bool {
+        momentumPhase.isEmpty && !phase.contains(.mayBegin) && !phase.contains(.cancelled)
     }
 
     private func report(_ outcome: ModifierGesture.Outcome?) {

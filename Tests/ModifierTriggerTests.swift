@@ -28,3 +28,17 @@ struct ModifierTriggerTests {
         #expect(ModifierTrigger.rightOption.othersHeld(in: flags([.option, .function], device: 0x40)))
     }
 }
+
+struct CombinationScrollTests {
+    @Test func wheelAndActiveTrackpadScrollsCount() {
+        #expect(ModifierHotkeyMonitor.isDeliberateScroll(phase: [], momentumPhase: []))
+        #expect(ModifierHotkeyMonitor.isDeliberateScroll(phase: .changed, momentumPhase: []))
+    }
+
+    @Test func momentumAndRestingFingersDoNot() {
+        // A fling keeps scrolling for a second after the fingers leave.
+        #expect(!ModifierHotkeyMonitor.isDeliberateScroll(phase: [], momentumPhase: .changed))
+        #expect(!ModifierHotkeyMonitor.isDeliberateScroll(phase: .mayBegin, momentumPhase: []))
+        #expect(!ModifierHotkeyMonitor.isDeliberateScroll(phase: .cancelled, momentumPhase: []))
+    }
+}
