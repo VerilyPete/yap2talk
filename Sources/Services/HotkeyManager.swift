@@ -14,16 +14,17 @@ final class HotkeyManager {
         pressHandler = pressed
         releaseHandler = released
         KeyboardShortcuts.onKeyDown(for: .toggleRecording) { [weak self] in
-            self?.pressHandler?(Self.lastEvent(.keyDown))
+            self?.pressHandler?(Self.lastEventTime(.keyDown))
         }
         KeyboardShortcuts.onKeyUp(for: .toggleRecording) { [weak self] in
-            self?.releaseHandler?(Self.lastEvent(.keyUp))
+            self?.releaseHandler?(Self.lastEventTime(.keyUp))
         }
     }
 
     /// Carbon hands over no event to read a timestamp from, so ask the event
-    /// system when the key actually moved.
-    private static func lastEvent(_ type: CGEventType) -> Date {
-        Date(timeIntervalSinceNow: -CGEventSource.secondsSinceLastEventType(.hidSystemState, eventType: type))
+    /// system when the key actually moved. The combined session state also
+    /// counts keys that macro tools post, which the hardware state misses.
+    private static func lastEventTime(_ type: CGEventType) -> Date {
+        Date(timeIntervalSinceNow: -CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: type))
     }
 }
