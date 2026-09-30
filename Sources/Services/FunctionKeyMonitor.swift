@@ -59,6 +59,29 @@ enum FunctionKeyTrigger: String, CaseIterable, Identifiable {
         guard !isRepeat, trigger.keyCodes.contains(keyCode) else { return false }
         return flags.intersection([.maskCommand, .maskAlternate, .maskControl, .maskShift]).isEmpty
     }
+
+    enum Response: Equatable {
+        case press, release, swallow, passThrough
+    }
+
+    /// Once Yap takes a press, the rest of it is Yap's too: its key-up is the
+    /// release, and its auto-repeats are swallowed. Letting those through would
+    /// hand the system a stray F5 — macOS dictation — partway through a hold.
+    static func response(
+        trigger: FunctionKeyTrigger,
+        isKeyDown: Bool,
+        keyCode: Int64,
+        flags: CGEventFlags,
+        isRepeat: Bool,
+        heldKeyCode: Int64?
+    ) -> Response {
+        if keyCode == heldKeyCode, !isKeyDown { return .release }
+        if keyCode == heldKeyCode, isRepeat { return .swallow }
+        guard isKeyDown,
+              shouldFire(trigger: trigger, keyCode: keyCode, flags: flags, isRepeat: isRepeat)
+        else { return .passThrough }
+        return .press
+    }
 }
 
 @MainActor
@@ -66,10 +89,12 @@ final class FunctionKeyMonitor {
     var trigger: FunctionKeyTrigger = .none {
         didSet { sync() }
     }
-    var onTap: (() -> Void)?
+    var onPress: (() -> Void)?
+    var onRelease: (() -> Void)?
 
     private var tap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
+    private var heldKeyCode: Int64?
 
     func start() { sync() }
 
@@ -99,7 +124,7 @@ final class FunctionKeyMonitor {
             tap: .cghidEventTap,
             place: .headInsertEventTap,
             options: .defaultTap,
-            eventsOfInterest: CGEventMask(1 << CGEventType.keyDown.rawValue),
+            eventsOfInterest: CGEventMask(1 << CGEventType.keyDown.rawValue | 1 << CGEventType.keyUp.rawValue),
             callback: callback,
             userInfo: Unmanaged.passUnretained(self).toOpaque()
         ) else {
@@ -118,6 +143,7 @@ final class FunctionKeyMonitor {
     }
 
     private func uninstall() {
+        heldKeyCode = nil
         if let source = runLoopSource {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
             runLoopSource = nil
@@ -143,21 +169,32 @@ final class FunctionKeyMonitor {
             return Unmanaged.passUnretained(event)
         }
 
-        guard type == .keyDown else { return Unmanaged.passUnretained(event) }
+        guard type == .keyDown || type == .keyUp else { return Unmanaged.passUnretained(event) }
 
         let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
         let isRepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
         // The tap's run-loop source is scheduled on the main loop, so this
         // callback is already on the main thread — assumeIsolated, don't sync.
-        let shouldFire = MainActor.assumeIsolated {
-            FunctionKeyTrigger.shouldFire(
-                trigger: trigger, keyCode: keyCode, flags: event.flags, isRepeat: isRepeat
+        let response = MainActor.assumeIsolated {
+            let response = FunctionKeyTrigger.response(
+                trigger: trigger, isKeyDown: type == .keyDown, keyCode: keyCode,
+                flags: event.flags, isRepeat: isRepeat, heldKeyCode: heldKeyCode
             )
+            if response == .press { heldKeyCode = keyCode }
+            if response == .release { heldKeyCode = nil }
+            return response
         }
 
-        guard shouldFire else { return Unmanaged.passUnretained(event) }
-
-        DispatchQueue.main.async { [weak self] in self?.onTap?() }
+        switch response {
+        case .passThrough:
+            return Unmanaged.passUnretained(event)
+        case .press:
+            DispatchQueue.main.async { [weak self] in self?.onPress?() }
+        case .release:
+            DispatchQueue.main.async { [weak self] in self?.onRelease?() }
+        case .swallow:
+            break
+        }
         // Swallow it: for the dictation key this is what keeps macOS's own
         // dictation from popping up alongside Yap.
         return nil

@@ -166,9 +166,13 @@ final class AppState {
         modifierHotkeys.trigger = modifierTrigger
         modifierHotkeys.start()
 
-        functionKeys.onTap = { [weak self] in
+        functionKeys.onPress = { [weak self] in
             guard let self else { return }
-            Task { await self.coordinator.toggle() }
+            Task { await self.coordinator.triggerPressed() }
+        }
+        functionKeys.onRelease = { [weak self] in
+            guard let self else { return }
+            Task { await self.coordinator.triggerReleased() }
         }
         functionKeys.trigger = functionKeyTrigger
         functionKeys.start()
