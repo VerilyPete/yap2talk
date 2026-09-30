@@ -8,8 +8,12 @@ final class FakeSession: DictationSessioning {
     var textToReturn = "hello world"
     var startCalled = 0
     var stopCalled = 0
+    var startGate: (() async -> Void)?
 
-    func start() async throws { startCalled += 1 }
+    func start() async throws {
+        startCalled += 1
+        await startGate?()
+    }
     func stop() async throws -> String { stopCalled += 1; return textToReturn }
 }
 
@@ -133,6 +137,28 @@ struct RecordingCoordinatorTests {
         #expect(injector.delivered == ["hello world"])
         #expect(history.saved == ["hello world"])
         #expect(coordinator.lastOutcome == .pasted)
+    }
+
+    @Test func stopDuringStartWaitsForTheStartToFinish() async {
+        let session = FakeSession()
+        var finishStart: CheckedContinuation<Void, Never>?
+        session.startGate = { await withCheckedContinuation { finishStart = $0 } }
+        let injector = FakeInjector()
+        let coordinator = makeCoordinator(session: session, injector: injector)
+
+        let starting = Task { await coordinator.toggle() }
+        while finishStart == nil { await Task.yield() }
+        await coordinator.toggle()
+
+        // Stopping a half-built session would leave the microphone running unseen.
+        #expect(session.stopCalled == 0)
+
+        finishStart?.resume()
+        await starting.value
+
+        #expect(session.stopCalled == 1)
+        #expect(injector.delivered == ["hello world"])
+        #expect(coordinator.state == .idle)
     }
 
     @Test func emptyTranscriptIsNotSavedOrInserted() async {

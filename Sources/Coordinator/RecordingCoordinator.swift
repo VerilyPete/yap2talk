@@ -24,6 +24,10 @@ final class RecordingCoordinator {
 
     private var startedAt: Date?
 
+    // A stop that arrives while the session is still starting waits for it; tearing down a half-built session would leave the microphone running unseen.
+    private var isStarting = false
+    private var stopWhenStarted = false
+
     private var cancelArmed = false
     private var cancelArmTask: Task<Void, Never>?
     private let cancelArmWindow: Duration = .milliseconds(2500)
@@ -115,16 +119,30 @@ final class RecordingCoordinator {
         hud.show(device: deviceName())
         hud.setPhase(.listening)
 
+        isStarting = true
         do {
             try await session.start()
+            isStarting = false
         } catch {
+            isStarting = false
+            stopWhenStarted = false
             NSLog("Yap: failed to start recording: \(error.localizedDescription)")
             hud.hide(after: 0)
             state = .idle
+            return
+        }
+
+        if stopWhenStarted {
+            stopWhenStarted = false
+            await stopRecording()
         }
     }
 
     private func stopRecording() async {
+        guard !isStarting else {
+            stopWhenStarted = true
+            return
+        }
         disarmCancel()
         state = .transcribing
         sounds.playStop()
