@@ -55,7 +55,7 @@ struct FunctionKeyTriggerTests {
         ))
     }
 
-    @Test func aTriggerPressIsTaken() {
+    @Test func pressingTheTriggerIsAPress() {
         #expect(FunctionKeyTrigger.response(
             trigger: .dictation, isKeyDown: true, keyCode: Int64(kVK_F5), flags: [],
             isRepeat: false, heldKeyCode: nil
@@ -77,7 +77,7 @@ struct FunctionKeyTriggerTests {
         ) == .swallow)
     }
 
-    @Test func aFreshPressOfTheHeldKeyIsAPress() {
+    @Test func freshPressOfTheHeldKeyIsAPress() {
         // A key-up the tap never saw must not wedge the trigger.
         #expect(FunctionKeyTrigger.response(
             trigger: .dictation, isKeyDown: true, keyCode: Int64(kVK_F5), flags: [],

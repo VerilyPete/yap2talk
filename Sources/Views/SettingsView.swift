@@ -147,7 +147,7 @@ struct SettingsView: View {
 
                     SettingsToggleRow(
                         title: "Hold to talk",
-                        subtitle: "Hold the shortcut while you speak, and let go to finish.",
+                        subtitle: "Hold a trigger while you speak and let go to finish. A quick tap still starts and stops.",
                         isOn: $app.holdToTalkEnabled
                     )
                 }

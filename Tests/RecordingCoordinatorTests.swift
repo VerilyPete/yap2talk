@@ -191,7 +191,7 @@ struct RecordingCoordinatorTests {
         #expect(coordinator.state == .idle)
     }
 
-    @Test func aQuickTapKeepsRecordingUntilTheNextPress() async {
+    @Test func quickTapKeepsRecordingUntilTheNextPress() async {
         let session = FakeSession()
         let injector = FakeInjector()
         let coordinator = makeCoordinator(session: session, injector: injector)

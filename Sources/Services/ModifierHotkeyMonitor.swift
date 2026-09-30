@@ -74,7 +74,8 @@ enum ModifierTrigger: String, CaseIterable, Identifiable {
 
 /// "Clean" means pressed and released on its own — so holding Right Shift to
 /// type a capital letter never fires the trigger. A clean press released quickly
-/// is a tap; one held past `maximumTapDuration` becomes a hold until release.
+/// is a tap; one held past `maximumTapDuration` becomes a hold until release,
+/// and a hold that turns out to be part of a combo after all is abandoned.
 struct ModifierGesture {
     enum Outcome: Equatable {
         case tap
@@ -86,11 +87,11 @@ struct ModifierGesture {
     /// Longer than this and it was a hold, not a tap.
     static let maximumTapDuration: TimeInterval = 0.6
 
-    var holdsEnabled = false
+    let holdsEnabled: Bool
 
     private var pressedAt: Date?
     private var usedInCombination = false
-    private var isHolding = false
+    private var isHoldingToTalk = false
 
     init(holdsEnabled: Bool = false) {
         self.holdsEnabled = holdsEnabled
@@ -101,29 +102,29 @@ struct ModifierGesture {
     mutating func pressed(at time: Date, otherInputHeld: Bool = false) {
         pressedAt = time
         usedInCombination = otherInputHeld
-        isHolding = false
+        isHoldingToTalk = false
     }
 
     /// Another key, modifier or click while ours is down — that's a combo.
     mutating func combined() -> Outcome? {
         usedInCombination = true
-        guard isHolding else { return nil }
-        isHolding = false
+        guard isHoldingToTalk else { return nil }
+        isHoldingToTalk = false
         return .holdAbandoned
     }
 
     /// Called `maximumTapDuration` after a press, if it is still down.
     mutating func holdElapsed() -> Outcome? {
         guard holdsEnabled, let pressedAt, !usedInCombination else { return nil }
-        isHolding = true
+        isHoldingToTalk = true
         return .holdStarted(at: pressedAt)
     }
 
     mutating func released(at time: Date, otherModifiersHeld: Bool) -> Outcome? {
         guard let pressedAt else { return nil }
         self.pressedAt = nil
-        if isHolding {
-            isHolding = false
+        if isHoldingToTalk {
+            isHoldingToTalk = false
             return .holdEnded(at: time)
         }
         let heldFor = time.timeIntervalSince(pressedAt)

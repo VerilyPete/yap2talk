@@ -3,21 +3,21 @@ import Testing
 @testable import Yap
 
 struct ModifierGestureTests {
-    private let pressedAt = Date()
+    private let pressedAt = Date(timeIntervalSinceReferenceDate: 0)
 
-    @Test func aQuickCleanPressIsATap() {
+    @Test func quickCleanPressIsATap() {
         var gesture = ModifierGesture()
         gesture.pressed(at: pressedAt)
         #expect(gesture.released(at: pressedAt.addingTimeInterval(0.2), otherModifiersHeld: false) == .tap)
     }
 
-    @Test func aSlowPressIsNotATap() {
+    @Test func slowPressIsNotATap() {
         var gesture = ModifierGesture()
         gesture.pressed(at: pressedAt)
         #expect(gesture.released(at: pressedAt.addingTimeInterval(1), otherModifiersHeld: false) == nil)
     }
 
-    @Test func aPressUsedInACombinationIsNotATap() {
+    @Test func pressUsedInACombinationIsNotATap() {
         // Right Shift held to type a capital letter.
         var gesture = ModifierGesture()
         gesture.pressed(at: pressedAt)
@@ -25,20 +25,20 @@ struct ModifierGestureTests {
         #expect(gesture.released(at: pressedAt.addingTimeInterval(0.2), otherModifiersHeld: false) == nil)
     }
 
-    @Test func aPressWithAnotherModifierStillDownIsNotATap() {
+    @Test func pressWithAnotherModifierStillDownIsNotATap() {
         var gesture = ModifierGesture()
         gesture.pressed(at: pressedAt)
         #expect(gesture.released(at: pressedAt.addingTimeInterval(0.2), otherModifiersHeld: true) == nil)
     }
 
-    @Test func aCleanHoldStartsFromWhenTheKeyWentDown() {
+    @Test func cleanHoldStartsFromWhenTheKeyWentDown() {
         var gesture = ModifierGesture(holdsEnabled: true)
         gesture.pressed(at: pressedAt)
         #expect(gesture.holdElapsed() == .holdStarted(at: pressedAt))
         #expect(gesture.released(at: pressedAt.addingTimeInterval(3), otherModifiersHeld: false) == .holdEnded(at: pressedAt.addingTimeInterval(3)))
     }
 
-    @Test func aCombinationDuringAHoldAbandonsIt() {
+    @Test func combinationDuringAHoldAbandonsIt() {
         var gesture = ModifierGesture(holdsEnabled: true)
         gesture.pressed(at: pressedAt)
         _ = gesture.holdElapsed()
@@ -46,7 +46,7 @@ struct ModifierGestureTests {
         #expect(gesture.released(at: pressedAt.addingTimeInterval(3), otherModifiersHeld: false) == nil)
     }
 
-    @Test func aCombinationBeforeTheHoldPreventsIt() {
+    @Test func combinationBeforeTheHoldPreventsIt() {
         var gesture = ModifierGesture(holdsEnabled: true)
         gesture.pressed(at: pressedAt)
         _ = gesture.combined()
@@ -59,7 +59,7 @@ struct ModifierGestureTests {
         #expect(gesture.holdElapsed() == nil)
     }
 
-    @Test func aReleaseWithoutAPressIsNothing() {
+    @Test func releaseWithoutAPressIsNothing() {
         var gesture = ModifierGesture(holdsEnabled: true)
         #expect(gesture.released(at: pressedAt, otherModifiersHeld: false) == nil)
         #expect(gesture.holdElapsed() == nil)
@@ -71,5 +71,49 @@ struct ModifierGestureTests {
         gesture.pressed(at: pressedAt, otherInputHeld: true)
         #expect(gesture.holdElapsed() == nil)
         #expect(gesture.released(at: pressedAt.addingTimeInterval(0.2), otherModifiersHeld: false) == nil)
+    }
+
+    @Test func combinationDoesNotSpoilTheNextPress() {
+        var gesture = ModifierGesture()
+        gesture.pressed(at: pressedAt)
+        _ = gesture.combined()
+        _ = gesture.released(at: pressedAt.addingTimeInterval(0.2), otherModifiersHeld: false)
+        gesture.pressed(at: pressedAt.addingTimeInterval(5))
+        #expect(gesture.released(at: pressedAt.addingTimeInterval(5.2), otherModifiersHeld: false) == .tap)
+    }
+
+    @Test func typingAfterAHoldEndsAbandonsNothing() {
+        var gesture = ModifierGesture(holdsEnabled: true)
+        gesture.pressed(at: pressedAt)
+        _ = gesture.holdElapsed()
+        _ = gesture.released(at: pressedAt.addingTimeInterval(3), otherModifiersHeld: false)
+        #expect(gesture.combined() == nil)
+    }
+
+    @Test func releaseIsReportedOnce() {
+        var gesture = ModifierGesture()
+        gesture.pressed(at: pressedAt)
+        #expect(gesture.released(at: pressedAt.addingTimeInterval(0.2), otherModifiersHeld: false) == .tap)
+        #expect(gesture.released(at: pressedAt.addingTimeInterval(0.3), otherModifiersHeld: false) == nil)
+    }
+
+    @Test func freshPressAfterAMissedReleaseIsATap() {
+        var gesture = ModifierGesture(holdsEnabled: true)
+        gesture.pressed(at: pressedAt)
+        _ = gesture.holdElapsed()
+        gesture.pressed(at: pressedAt.addingTimeInterval(5))
+        #expect(gesture.released(at: pressedAt.addingTimeInterval(5.2), otherModifiersHeld: false) == .tap)
+    }
+
+    @Test func pressReleasedAtTheTapLimitIsNotATap() {
+        var gesture = ModifierGesture()
+        gesture.pressed(at: pressedAt)
+        #expect(gesture.released(at: pressedAt.addingTimeInterval(0.6), otherModifiersHeld: false) == nil)
+    }
+
+    @Test func pressReleasedJustInsideTheTapLimitIsATap() {
+        var gesture = ModifierGesture()
+        gesture.pressed(at: pressedAt)
+        #expect(gesture.released(at: pressedAt.addingTimeInterval(0.59), otherModifiersHeld: false) == .tap)
     }
 }
