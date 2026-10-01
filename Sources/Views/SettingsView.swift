@@ -155,8 +155,29 @@ struct SettingsView: View {
 
                     HStack(spacing: Theme.s3) {
                         VStack(alignment: .leading, spacing: 2) {
+                            Text("Start a modifier hold after").font(.system(size: 13, weight: .medium))
+                            Text(modifierHoldUnavailableReason ?? "Shorter starts recording sooner, but a tap has to be quicker.")
+                                .font(.system(size: 12)).foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: Theme.s3)
+                        Picker("", selection: $app.holdDelay) {
+                            ForEach(HoldDelay.allCases) { delay in
+                                Text(delay.title).tag(delay)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(width: 168)
+                    }
+                    .padding(.horizontal, Theme.s3)
+                    .padding(.vertical, Theme.s2 + 2)
+                    .disabled(modifierHoldUnavailableReason != nil)
+
+                    Divider().overlay(Theme.hairline).padding(.horizontal, Theme.s3)
+
+                    HStack(spacing: Theme.s3) {
+                        VStack(alignment: .leading, spacing: 2) {
                             Text("Discard a hold if another key is pressed").font(.system(size: 13, weight: .medium))
-                            Text(holdInterruptionSubtitle)
+                            Text(modifierHoldUnavailableReason ?? "For the single modifier key. Clicks and scrolls count too, since they usually mean a shortcut.")
                                 .font(.system(size: 12)).foregroundStyle(.secondary)
                         }
                         Spacer(minLength: Theme.s3)
@@ -170,16 +191,16 @@ struct SettingsView: View {
                     }
                     .padding(.horizontal, Theme.s3)
                     .padding(.vertical, Theme.s2 + 2)
-                    .disabled(!app.holdToTalkEnabled || app.modifierTrigger == .none)
+                    .disabled(modifierHoldUnavailableReason != nil)
                 }
             }
         }
     }
 
-    private var holdInterruptionSubtitle: String {
+    private var modifierHoldUnavailableReason: String? {
         if app.modifierTrigger == .none { return "Set a single modifier key above to use this." }
         if !app.holdToTalkEnabled { return "Turn on Hold to talk to use this." }
-        return "For the single modifier key. Clicks and scrolls count too, since they usually mean a shortcut."
+        return nil
     }
 
     private var languageSection: some View {

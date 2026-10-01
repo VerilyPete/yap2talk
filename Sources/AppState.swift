@@ -32,6 +32,13 @@ final class AppState {
         }
     }
 
+    var holdDelay: HoldDelay {
+        didSet {
+            UserDefaults.standard.set(holdDelay.rawValue, forKey: "holdDelay")
+            modifierHotkeys.holdDelay = holdDelay
+        }
+    }
+
     var holdInterruption: HoldInterruption {
         didSet {
             UserDefaults.standard.set(holdInterruption.rawValue, forKey: "holdInterruption")
@@ -119,6 +126,9 @@ final class AppState {
         showInMenuBar = (UserDefaults.standard.object(forKey: "showInMenuBar") as? Bool) ?? true
         cleanupEnabled = (UserDefaults.standard.object(forKey: "cleanupEnabled") as? Bool) ?? false
         holdToTalkEnabled = (UserDefaults.standard.object(forKey: "holdToTalkEnabled") as? Bool) ?? true
+        holdDelay = HoldDelay(
+            rawValue: UserDefaults.standard.string(forKey: "holdDelay") ?? ""
+        ) ?? .standard
         holdInterruption = HoldInterruption(
             rawValue: UserDefaults.standard.string(forKey: "holdInterruption") ?? ""
         ) ?? .earlyOnly
@@ -193,6 +203,7 @@ final class AppState {
         modifierHotkeys.trigger = modifierTrigger
         modifierHotkeys.holdsEnabled = holdToTalkEnabled
         modifierHotkeys.holdInterruption = holdInterruption
+        modifierHotkeys.holdDelay = holdDelay
         modifierHotkeys.start()
 
         functionKeys.onPress = { [weak self] time in

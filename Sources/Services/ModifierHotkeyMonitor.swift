@@ -112,9 +112,35 @@ enum HoldInterruption: String, CaseIterable, Identifiable {
     }
 }
 
+/// How long a modifier must be held, alone, before recording starts. Shorter
+/// starts sooner, but a tap then has to be quicker too, and holding Shift a
+/// moment before a capital letter starts (and abandons) more dictations. None
+/// is below the coordinator's minimum hold, since holds are timed from key-down.
+enum HoldDelay: String, CaseIterable, Identifiable {
+    case quick, medium, standard
+
+    var id: String { rawValue }
+
+    var seconds: TimeInterval {
+        switch self {
+        case .quick: return 0.3
+        case .medium: return 0.45
+        case .standard: return ModifierGesture.maximumTapDuration
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .quick: return "0.3 seconds"
+        case .medium: return "0.45 seconds"
+        case .standard: return "0.6 seconds"
+        }
+    }
+}
+
 /// "Clean" means pressed and released on its own — so holding Right Shift to
 /// type a capital letter never fires the trigger. A clean press released quickly
-/// is a tap; one held past `maximumTapDuration` becomes a hold until release.
+/// is a tap; one held past `holdDelay` becomes a hold until release.
 /// `interruption` decides whether a combo that follows abandons the hold.
 struct ModifierGesture {
     enum Outcome: Equatable {
@@ -124,7 +150,8 @@ struct ModifierGesture {
         case holdAbandoned
     }
 
-    /// Longer than this and it was a hold, not a tap.
+    /// Longer than this and it was a hold, not a tap. With holds on, the hold
+    /// delay takes over, so a press is always one or the other.
     static let maximumTapDuration: TimeInterval = 0.6
 
     /// How long after recording starts `.earlyOnly` still treats another key
@@ -133,14 +160,20 @@ struct ModifierGesture {
 
     let holdsEnabled: Bool
     var interruption: HoldInterruption
+    var holdDelay: HoldDelay
 
     private var pressedAt: Date?
     private var usedInCombination = false
     private var isHoldingToTalk = false
 
-    init(holdsEnabled: Bool = false, interruption: HoldInterruption = .earlyOnly) {
+    init(holdsEnabled: Bool = false, interruption: HoldInterruption = .earlyOnly, holdDelay: HoldDelay = .standard) {
         self.holdsEnabled = holdsEnabled
         self.interruption = interruption
+        self.holdDelay = holdDelay
+    }
+
+    private var tapWindow: TimeInterval {
+        holdsEnabled ? holdDelay.seconds : Self.maximumTapDuration
     }
 
     /// A press made while another modifier or a mouse button is already down
@@ -156,7 +189,7 @@ struct ModifierGesture {
     mutating func combined(at time: Date) -> Outcome? {
         usedInCombination = true
         guard isHoldingToTalk, let pressedAt else { return nil }
-        let recordingFor = time.timeIntervalSince(pressedAt) - Self.maximumTapDuration
+        let recordingFor = time.timeIntervalSince(pressedAt) - holdDelay.seconds
         // Input from before recording began was a shortcut, whatever the setting.
         switch interruption {
         case .never where recordingFor >= 0: return nil
@@ -167,7 +200,7 @@ struct ModifierGesture {
         return .holdAbandoned
     }
 
-    /// Called `maximumTapDuration` after a press, if it is still down.
+    /// Called `holdDelay` after a press, if it is still down.
     mutating func holdElapsed() -> Outcome? {
         guard holdsEnabled, let pressedAt, !usedInCombination else { return nil }
         isHoldingToTalk = true
@@ -182,7 +215,7 @@ struct ModifierGesture {
             return .holdEnded(at: time)
         }
         let heldFor = time.timeIntervalSince(pressedAt)
-        guard !usedInCombination, heldFor < Self.maximumTapDuration, !otherModifiersHeld else { return nil }
+        guard !usedInCombination, heldFor < tapWindow, !otherModifiersHeld else { return nil }
         return .tap
     }
 }
@@ -197,6 +230,9 @@ final class ModifierHotkeyMonitor {
     }
     var holdInterruption: HoldInterruption = .earlyOnly {
         didSet { gesture.interruption = holdInterruption }
+    }
+    var holdDelay: HoldDelay = .standard {
+        didSet { gesture.holdDelay = holdDelay }
     }
     var onGesture: ((ModifierGesture.Outcome) -> Void)?
 
@@ -251,7 +287,7 @@ final class ModifierHotkeyMonitor {
 
     private func reset() {
         holdTimer?.cancel()
-        gesture = ModifierGesture(holdsEnabled: holdsEnabled, interruption: holdInterruption)
+        gesture = ModifierGesture(holdsEnabled: holdsEnabled, interruption: holdInterruption, holdDelay: holdDelay)
     }
 
     private func noteCombination(_ event: NSEvent) {
@@ -287,7 +323,7 @@ final class ModifierHotkeyMonitor {
             gesture.pressed(at: time, otherInputHeld: otherInputHeld)
             holdTimer?.cancel()
             guard holdsEnabled else { return }
-            let wait = ModifierGesture.maximumTapDuration - Date().timeIntervalSince(time)
+            let wait = holdDelay.seconds - Date().timeIntervalSince(time)
             holdTimer = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(max(wait, 0)))
                 guard !Task.isCancelled, let self else { return }

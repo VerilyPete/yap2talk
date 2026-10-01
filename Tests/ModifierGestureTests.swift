@@ -162,4 +162,34 @@ struct ModifierGestureTests {
         _ = gesture.holdElapsed()
         #expect(gesture.combined(at: pressedAt.addingTimeInterval(0.55)) == .holdAbandoned)
     }
+
+    @Test func shorterHoldDelayShrinksTheTapWindow() {
+        var gesture = ModifierGesture(holdsEnabled: true, holdDelay: .quick)
+        gesture.pressed(at: pressedAt)
+        #expect(gesture.released(at: pressedAt.addingTimeInterval(0.29), otherModifiersHeld: false) == .tap)
+        gesture.pressed(at: pressedAt)
+        #expect(gesture.released(at: pressedAt.addingTimeInterval(0.3), otherModifiersHeld: false) == nil)
+    }
+
+    @Test func tapWindowStaysAtItsDefaultWhenHoldsAreOff() {
+        var gesture = ModifierGesture(holdsEnabled: false, holdDelay: .quick)
+        gesture.pressed(at: pressedAt)
+        #expect(gesture.released(at: pressedAt.addingTimeInterval(0.5), otherModifiersHeld: false) == .tap)
+    }
+
+    @Test func interruptionWindowCountsFromWhenTheHoldStarted() {
+        var gesture = ModifierGesture(holdsEnabled: true, holdDelay: .quick)
+        gesture.pressed(at: pressedAt)
+        _ = gesture.holdElapsed()
+        #expect(gesture.combined(at: pressedAt.addingTimeInterval(1.29)) == .holdAbandoned)
+        gesture.pressed(at: pressedAt)
+        _ = gesture.holdElapsed()
+        #expect(gesture.combined(at: pressedAt.addingTimeInterval(1.3)) == nil)
+    }
+
+    @Test func holdDelaysStayAboveTheCoordinatorsMinimumHold() {
+        // A modifier hold is reported from key-down, so its release must always
+        // count as a hold rather than a tap.
+        #expect(HoldDelay.allCases.allSatisfy { $0.seconds >= 0.3 })
+    }
 }
